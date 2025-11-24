@@ -12,7 +12,7 @@ const getQuote = async (
 	customQuotes: CustomQuote[]
 ) => {
 	let actualQuoteSource = quoteSource;
-	let quote = {};
+	let quote: any = {};
 
 	// If set to both, pick one of the two at random
 	if (quoteSource === QUOTE_SOURCE.BOTH) {
@@ -22,13 +22,22 @@ const getQuote = async (
 	}
 
 	if (actualQuoteSource === QUOTE_SOURCE.QUOTEABLE) {
-		quote = await requestUrl("https://api.quotable.io/random").then(
-			async (res) => {
-				if (res.status === 200) {
-					return await res.json;
-				}
+		try {
+			const response = await requestUrl("https://dummyjson.com/quotes/random");
+			if (response.status === 200) {
+				const data = response.json;
+				quote = { content: data.quote, author: data.author };
+			} else {
+				throw new Error("Status not 200");
 			}
-		);
+		} catch (e) {
+			console.error("Failed to fetch quote", e);
+			quote = {
+				content:
+					"Oops! We couldn't fetch a quote for you. Please check your internet connection.",
+				author: "Beautitab",
+			};
+		}
 	} else if (actualQuoteSource === QUOTE_SOURCE.MY_QUOTES) {
 		const randomQuote =
 			customQuotes[Math.floor(Math.random() * customQuotes.length)];
