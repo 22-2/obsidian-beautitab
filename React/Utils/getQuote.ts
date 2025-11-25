@@ -40,7 +40,8 @@ const getQuote = async (
 		}
 	} else if (actualQuoteSource === QUOTE_SOURCE.MY_QUOTES) {
 		const randomQuote =
-			customQuotes[Math.floor(Math.random() * customQuotes.length)];
+			customQuotes[Math.floor(Math.random() * customQuotes.length)]
+				?? { text: "No quotes available.", author: "Beautitab" };
 		quote = { content: randomQuote.text, author: randomQuote.author };
 	}
 
