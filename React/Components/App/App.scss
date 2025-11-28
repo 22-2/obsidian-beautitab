@@ -36,7 +36,6 @@
 	}
 
 	.beautitab-root {
-			position: relative;
 		height: 100%;
 		width: 100%;
 		text-shadow: rgba(0, 0, 0, 0.1) 0px 1px 5px;
@@ -45,63 +44,10 @@
 		background-repeat: no-repeat;
 		background-size: cover;
 
-		/* Background layering for smooth cross-fade (positioned under wrapper) */
-		.beautitab-bg-layering {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			z-index: 0; /* behind content */
-			pointer-events: none;
-			--bg-fade-duration: 600ms;
-		}
-
-		.beautitab-bg-overlay {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background: rgba(0,0,0,0.22); /* subtle darkening */
-			z-index: 1;
-			pointer-events: none;
-		}
-
-		.beautitab-bg {
-			position: absolute;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background-position: center center;
-			background-repeat: no-repeat;
-			background-size: cover;
-			transition: opacity var(--bg-fade-duration) ease-in-out;
-			opacity: 1;
-			filter: blur(0);
-		}
-
-		.beautitab-bg--prev {
-			opacity: 1;
-		}
-
-		.beautitab-bg--current {
-			opacity: 0;
-			animation: beautitab-fade-in var(--bg-fade-duration) ease-in-out forwards;
-		}
-
-		@keyframes beautitab-fade-in {
-			from { opacity: 0; }
-			to { opacity: 1; }
-		}
-
 		&.beautitab-root--transparent {
 			background: transparent;
 
 			.beautitab-wrapper {
-				position: relative;
-				z-index: 2;
 				background: transparent;
 
 				.beautitab-top {
@@ -119,8 +65,6 @@
 		}
 
 		.beautitab-wrapper {
-			position: relative;
-			z-index: 2;
 			height: 100%;
 			width: 100%;
 			display: flex;
@@ -159,9 +103,6 @@
 				}
 			}
 
-			/* Background layering for smooth cross-fade */
-
-
 			.beautitab-center {
 				flex: 1;
 				display: flex;
@@ -174,8 +115,6 @@
 				.beautitab-time {
 					font-size: 1050%;
 					line-height: 1;
-					color: #ffffff;
-					text-shadow: 0 6px 30px rgba(0,0,0,0.6);
 
 					@container (max-width: 520px) {
 						font-size: 30cqw;
@@ -215,7 +154,6 @@
 						width: 100%;
 						backdrop-filter: blur(5px);
 						background: rgba(255, 255, 255, 0.1);
-						background: rgba(255, 255, 255, 0.16);
 						box-shadow: 0 4px 30px rgba(0, 0, 0, 0.15);
 						margin-bottom: 20px;
 						text-decoration: none;
@@ -225,7 +163,7 @@
 
 						.beautitab-search-text {
 							font-size: 28px;
-							opacity: 0.95;
+							opacity: 0.8;
 							padding-left: 20px;
 						}
 

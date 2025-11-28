@@ -46,8 +46,6 @@ const App = ({
 		settingsObservable.getValue()
 	);
 	const [bg, setBg] = useState<CachedBackground | null>(null);
-	const [prevBgUrl, setPrevBgUrl] = useState<string | null>(null);
-	const [currentBgUrl, setCurrentBgUrl] = useState<string | null>(null);
 	const [time, setTime] = useState(getTime(settings.timeFormat));
 	const mainDivRef = useRef<HTMLDivElement>(null);
 	const backgroundRequestId = useRef(0);
@@ -85,23 +83,6 @@ const App = ({
 		settings.apiKey,
 		settings.cachedBackground,
 	]);
-
-	// Manage cross-fade URLs when `bg` changes
-	useEffect(() => {
-		const newUrl = bg?.url ?? null;
-		if (newUrl === currentBgUrl) return; // no change
-
-		// Shift current to prev, set new current
-		setPrevBgUrl(currentBgUrl);
-		setCurrentBgUrl(newUrl);
-
-		// clear previous after transition (match CSS --bg-fade-duration)
-		const timeout = setTimeout(() => {
-			setPrevBgUrl(null);
-		}, 700);
-
-		return () => clearTimeout(timeout);
-	}, [bg?.url]);
 
 	useEffect(() => {
 		if (!bg) {
@@ -203,9 +184,8 @@ const App = ({
 				"beautitab-root--transparentWithShadows"
 			}
 			`}
-			// background layers handled by inner elements
 			// @ts-ignore
-			style={undefined}
+			style={bg?.url ? { backgroundImage: `url("${bg.url}")` } : undefined}
 			onKeyDown={(e) => {
 				if (!e.ctrlKey && !e.altKey && /^[A-Za-z0-9]$/.test(e.key)) {
 					plugin.openSwitcherCommand(
@@ -216,23 +196,6 @@ const App = ({
 			tabIndex={0} // Make the div focusable so we can capture key strokes
 			ref={mainDivRef}
 		>
-			{/* Background layering for smooth transitions */}
-			<div className="beautitab-bg-layering">
-				{prevBgUrl && (
-					<div
-						className="beautitab-bg beautitab-bg--prev"
-						style={{ backgroundImage: `url("${prevBgUrl}")` }}
-					/>
-				)}
-				{currentBgUrl && (
-					<div
-						className="beautitab-bg beautitab-bg--current"
-						style={{ backgroundImage: `url("${currentBgUrl}")` }}
-					/>
-				)}
-			</div>
-			{/* darken overlay between bg and content to improve contrast */}
-			<div className="beautitab-bg-overlay" />
 			<div className="beautitab-wrapper">
 				<div className="beautitab-top">
 					{settings.showTopLeftSearchButton && (
@@ -349,7 +312,6 @@ const App = ({
 				</div>
 			</div>
 		</div>
-
 	);
 };
 
