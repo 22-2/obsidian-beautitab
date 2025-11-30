@@ -48,34 +48,16 @@ const App = ({
 	const [bg, setBg] = useState<CachedBackground | null>(null);
 	const [time, setTime] = useState(getTime(settings.timeFormat));
 	const mainDivRef = useRef<HTMLDivElement>(null);
-	const backgroundRequestId = useRef(0);
 
 	const obsidian = useObsidian();
-
-	useEffect(() => {
-		let isMounted = true;
-		const currentRequestId = ++backgroundRequestId.current;
-
-		setBg(settings.cachedBackground ?? null);
-
-		(async () => {
-			const fetchedBackground = await getBackground(
-				settings.backgroundTheme,
-				settings.customBackground,
-				settings.localBackgrounds,
-				settings.apiKey,
-				settings.cachedBackground
-			);
-
-			if (!isMounted) return;
-			if (currentRequestId === backgroundRequestId.current) {
-				setBg(fetchedBackground);
-			}
-		})();
-
-		return () => {
-			isMounted = false;
-		};
+	const background = useMemo(async () => {
+		return await getBackground(
+			settings.backgroundTheme,
+			settings.customBackground,
+			settings.localBackgrounds,
+			settings.apiKey,
+			settings.cachedBackground
+		);
 	}, [
 		settings.backgroundTheme,
 		settings.customBackground,
@@ -83,29 +65,22 @@ const App = ({
 		settings.apiKey,
 		settings.cachedBackground,
 	]);
-
+	const getResult = async () => {
+		setBg(settings.cachedBackground ?? null);
+		const bg = await background;
+		setBg(bg);
+	};
 	useEffect(() => {
-		if (!bg) {
-			return;
-		}
+		getResult();
+	}, [background]);
 
-		const cached = settings.cachedBackground;
-		const bgDate = bg.date ? new Date(bg.date).getTime() : null;
-		const cachedDate = cached?.date
-			? new Date(cached.date).getTime()
-			: null;
-		const hasDifferentDate = bgDate !== cachedDate;
-		const hasDifferentTheme = bg.theme !== cached?.theme;
-		const hasDifferentUrl = bg.url !== cached?.url;
-		const shouldPersist =
-			!cached || hasDifferentDate || hasDifferentTheme || hasDifferentUrl;
-
-		if (shouldPersist) {
-			plugin.settings.cachedBackground = bg;
-			plugin.saveSettings();
-		}
-	}, [bg, plugin, settings.cachedBackground]);
-
+	if (
+		(bg && bg.date !== settings.cachedBackground?.date) ||
+		(bg && bg.theme !== settings.cachedBackground?.theme)
+	) {
+		plugin.settings.cachedBackground = bg;
+		plugin.saveSettings();
+	}
 	const allVaultFiles = obsidian?.vault.getAllLoadedFiles();
 	const latestModifiedMarkdownFiles = useMemo(() => {
 		const files = allVaultFiles?.filter(
@@ -185,7 +160,9 @@ const App = ({
 			}
 			`}
 			// @ts-ignore
-			style={bg?.url ? { backgroundImage: `url("${bg.url}")` } : undefined}
+			style={{
+				backgroundImage: `url("${bg?.url}")`,
+			}}
 			onKeyDown={(e) => {
 				if (!e.ctrlKey && !e.altKey && /^[A-Za-z0-9]$/.test(e.key)) {
 					plugin.openSwitcherCommand(
