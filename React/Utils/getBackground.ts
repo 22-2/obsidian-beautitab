@@ -1,9 +1,9 @@
 import { BackgroundTheme } from "src/Types/Enums";
 import getEasterDate from "./getEasterDate";
 import { isWithinDaysBefore, isWithinHoursAfter } from "./isWithinXDays";
-import { createApi } from 'unsplash-js';
+import { createApi } from "unsplash-js";
 //@ts-ignore - This is a polyfill for fetch and work using --lib dom
-import { fetch as fetchPolyfill } from 'whatwg-fetch';
+import { fetch as fetchPolyfill } from "whatwg-fetch";
 import { CachedBackground } from "../../src/Types/Interfaces";
 
 enum MONTH {
@@ -46,6 +46,15 @@ enum SEASONAL_THEME {
 	REMEMBERANCE_DAY = "veteran",
 	CHRISTMAS = "christmas",
 }
+
+/**
+ * Normalize Unsplash URLs to a lower quality variant so we get a softer, blur-friendly image.
+ */
+const maybeLowerQualityUnsplashUrl = (url: string) => {
+	if (!url.includes("images.unsplash.com")) return url;
+	const separator = url.includes("?") ? "&" : "?";
+	return `${url}${separator}auto=format&fit=crop&w=1600&q=50`;
+};
 
 /**
  * Given a date, returns a seasonal tag for use in background generation
@@ -165,7 +174,10 @@ const getBackground = async (
 				cachedBackground && cachedBackground.url.length > 0 && cachedBackground.theme === backgroundTheme &&
 				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())
 			)
-				return cachedBackground;
+				return {
+					...cachedBackground,
+					url: maybeLowerQualityUnsplashUrl(cachedBackground.url),
+				};
 			const seasonalTag = getSeasonalTag(new Date());
 
 			if (apiKey.length === 0) return null;
@@ -182,9 +194,17 @@ const getBackground = async (
 
 			if (seasonHolidays) {
 				if (seasonHolidays instanceof Array) {
-					return { url: seasonHolidays[0].urls.raw, date: new Date(), theme: backgroundTheme };
+					return {
+						url: maybeLowerQualityUnsplashUrl(seasonHolidays[0].urls.raw),
+						date: new Date(),
+						theme: backgroundTheme,
+					};
 				}
-				return { url: seasonHolidays.urls.raw, date: new Date(), theme: backgroundTheme };
+				return {
+					url: maybeLowerQualityUnsplashUrl(seasonHolidays.urls.raw),
+					date: new Date(),
+					theme: backgroundTheme,
+				};
 			}
 			return null;
 		case BackgroundTheme.CUSTOM:
@@ -203,7 +223,10 @@ const getBackground = async (
 				cachedBackground && cachedBackground.url.length > 0 &&
 				backgroundTheme === cachedBackground.theme &&
 				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())
-			) return cachedBackground;
+			) return {
+				...cachedBackground,
+				url: maybeLowerQualityUnsplashUrl(cachedBackground.url),
+			};
 
 			if (apiKey.length === 0) return null;
 
@@ -218,9 +241,17 @@ const getBackground = async (
 			});
 			if (defRandom) {
 				if (defRandom instanceof Array) {
-					return { url: defRandom[0].urls.raw, date: new Date(), theme: backgroundTheme };
+					return {
+						url: maybeLowerQualityUnsplashUrl(defRandom[0].urls.raw),
+						date: new Date(),
+						theme: backgroundTheme,
+					};
 				}
-				return { url: defRandom.urls.raw, date: new Date(), theme: backgroundTheme };
+				return {
+					url: maybeLowerQualityUnsplashUrl(defRandom.urls.raw),
+					date: new Date(),
+					theme: backgroundTheme,
+				};
 			}
 			return null;
 	}

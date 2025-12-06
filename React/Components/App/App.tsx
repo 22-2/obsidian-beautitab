@@ -65,6 +65,12 @@ const App = ({
 		settings.apiKey,
 		settings.cachedBackground,
 	]);
+
+	const backgroundStyle = useMemo<React.CSSProperties>(() => {
+		return bg?.url
+			? { ["--beautitab-bg-url" as string]: `url("${bg.url}")` }
+			: {};
+	}, [bg?.url]);
 	const getResult = async () => {
 		setBg(settings.cachedBackground ?? null);
 		const bg = await background;
@@ -159,11 +165,7 @@ const App = ({
 				"beautitab-root--transparentWithShadows"
 			}
 			`}
-			// @ts-ignore
-			style={{
-				// Avoid triggering fetches for undefined URLs while bg resolves
-				backgroundImage: bg?.url ? `url("${bg.url}")` : undefined,
-			}}
+			style={backgroundStyle}
 			onKeyDown={(e) => {
 				if (!e.ctrlKey && !e.altKey && /^[A-Za-z0-9]$/.test(e.key)) {
 					plugin.openSwitcherCommand(

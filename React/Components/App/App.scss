@@ -43,9 +43,26 @@
 		background-position: center center;
 		background-repeat: no-repeat;
 		background-size: cover;
+		position: relative;
+		overflow: hidden;
+
+		&::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background-image: var(--beautitab-bg-url);
+			background-size: cover;
+			background-position: center;
+			filter: blur(14px);
+			transform: scale(1.06);
+			z-index: 0;
+		}
 
 		&.beautitab-root--transparent {
 			background: transparent;
+			&::before {
+				content: none;
+			}
 
 			.beautitab-wrapper {
 				background: transparent;
@@ -62,6 +79,9 @@
 
 		&.beautitab-root--transparentWithShadows {
 			background: transparent;
+			&::before {
+				content: none;
+			}
 		}
 
 		.beautitab-wrapper {
@@ -77,6 +97,8 @@
 				rgba(0, 0, 0, 0.6) 20%,
 				rgba(0, 0, 0, 0) 100%
 			);
+			position: relative;
+			z-index: 1;
 
 			.beautitab-top {
 				flex: 1;
