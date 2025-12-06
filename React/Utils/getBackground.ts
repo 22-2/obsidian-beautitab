@@ -165,12 +165,14 @@ const getBackground = async (
 	customBackground: string,
 	localBackgrounds: string[],
 	apiKey: string,
-	cachedBackground?: CachedBackground
+	cachedBackground?: CachedBackground,
+	forceRefresh: boolean = false
 ): Promise<CachedBackground | null> => {
 
 	switch (backgroundTheme) {
 		case BackgroundTheme.SEASONS_AND_HOLIDAYS:
 			if (
+				!forceRefresh &&
 				cachedBackground && cachedBackground.url.length > 0 && cachedBackground.theme === backgroundTheme &&
 				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())
 			)
@@ -220,6 +222,7 @@ const getBackground = async (
 			return null;
 		default:
 			if (
+				!forceRefresh &&
 				cachedBackground && cachedBackground.url.length > 0 &&
 				backgroundTheme === cachedBackground.theme &&
 				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())

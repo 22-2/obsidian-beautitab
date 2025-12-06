@@ -46,21 +46,36 @@
 		position: relative;
 		overflow: hidden;
 
-		&::before {
+		&::before,
+		&::after {
 			content: "";
 			position: absolute;
 			inset: 0;
-			background-image: var(--beautitab-bg-url);
 			background-size: cover;
 			background-position: center;
-			filter: blur(14px);
+			background-size: cover;
+			background-position: center;
+			filter: blur(4px);
 			transform: scale(1.06);
 			z-index: 0;
 			opacity: 0;
-			transition: opacity 350ms ease;
+			transition: opacity 450ms ease;
+			will-change: opacity;
+		}
+
+		&::before {
+			background-image: var(--beautitab-bg-url-current);
+		}
+
+		&::after {
+			background-image: var(--beautitab-bg-url-next);
 		}
 
 		&.beautitab-root--bg-visible::before {
+			opacity: 1;
+		}
+
+		&.beautitab-root--bg-crossfade::after {
 			opacity: 1;
 		}
 

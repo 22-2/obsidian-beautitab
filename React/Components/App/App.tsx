@@ -12,6 +12,25 @@ import getQuote from "React/Utils/getQuote";
 import { BackgroundTheme } from "src/Types/Enums";
 import { CachedBackground } from "../../../src/Types/Interfaces";
 
+const preloadImage = (url: string): Promise<void> => {
+	return new Promise((resolve) => {
+		let settled = false;
+		const finalize = () => {
+			if (settled) return;
+			settled = true;
+			resolve();
+		};
+		const img = new Image();
+		img.onload = finalize;
+		img.onerror = finalize;
+		img.src = url;
+		// decode can resolve sooner without layout
+		// ignore rejection to avoid stalling on decode support issues
+		// eslint-disable-next-line @typescript-eslint/no-floating-promises
+		img.decode?.().then(finalize).catch(finalize);
+	});
+};
+
 /**
  * Given an icon name, converts a Obsidian icon to a usable SVG string and embeds it into a span.
  * @returns
@@ -45,8 +64,10 @@ const App = ({
 	const [settings, setSettings] = useState<BeautitabPluginSettings>(
 		settingsObservable.getValue()
 	);
-	const [bg, setBg] = useState<CachedBackground | null>(null);
+	const [currentBg, setCurrentBg] = useState<CachedBackground | null>(null);
+	const [incomingBg, setIncomingBg] = useState<CachedBackground | null>(null);
 	const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
+	const [isCrossfading, setIsCrossfading] = useState(false);
 	const hasShownBackgroundRef = useRef(false);
 	const [time, setTime] = useState(getTime(settings.timeFormat));
 	const mainDivRef = useRef<HTMLDivElement>(null);
@@ -58,7 +79,8 @@ const App = ({
 			settings.customBackground,
 			settings.localBackgrounds,
 			settings.apiKey,
-			settings.cachedBackground
+			settings.cachedBackground,
+			settings.debugRefreshBackgroundOnOpen
 		);
 	}, [
 		settings.backgroundTheme,
@@ -66,37 +88,70 @@ const App = ({
 		settings.localBackgrounds,
 		settings.apiKey,
 		settings.cachedBackground,
+		settings.debugRefreshBackgroundOnOpen,
 	]);
 
-	const backgroundStyle = useMemo<React.CSSProperties>(() => {
-		return bg?.url
-			? { ["--beautitab-bg-url" as string]: `url("${bg.url}")` }
-			: {};
-	}, [bg?.url]);
+	const backgroundStyle = useMemo<Record<string, string> & React.CSSProperties>(() => {
+		const style: Record<string, string> & React.CSSProperties = {};
+		if (currentBg?.url) {
+			style["--beautitab-bg-url-current"] = `url("${currentBg.url}")`;
+		}
+		if (incomingBg?.url) {
+			style["--beautitab-bg-url-next"] = `url("${incomingBg.url}")`;
+		}
+		return style;
+	}, [currentBg?.url, incomingBg?.url]);
 	const getResult = async () => {
-		setBg(settings.cachedBackground ?? null);
+		// Always paint quickly with whatever we already have cached
+		const initialBg = settings.cachedBackground ?? null;
+		if (initialBg && !currentBg?.url) {
+			setCurrentBg(initialBg);
+		}
+
 		const bg = await background;
-		setBg(bg);
+		if (!bg?.url) return;
+		await preloadImage(bg.url);
+
+		// First load with no current background
+		if (!currentBg?.url) {
+			setCurrentBg(bg);
+			return;
+		}
+
+		// Same background, skip
+		if (currentBg.url === bg.url) return;
+
+		// Crossfade: keep current, fade in incoming, then swap
+		setIncomingBg(bg);
+		setIsCrossfading(true);
+		const timeout = window.setTimeout(() => {
+			setCurrentBg(bg);
+			setIncomingBg(null);
+			setIsCrossfading(false);
+		}, 500);
+
+		return () => window.clearTimeout(timeout);
 	};
 	useEffect(() => {
 		getResult();
 	}, [background]);
 
 	useEffect(() => {
-		if (!bg?.url) return;
+		if (!currentBg?.url && !incomingBg?.url) return;
 		if (!hasShownBackgroundRef.current) {
 			hasShownBackgroundRef.current = true;
 			requestAnimationFrame(() => setIsBackgroundVisible(true));
 			return;
 		}
 		setIsBackgroundVisible(true);
-	}, [bg?.url]);
+	}, [currentBg?.url, incomingBg?.url]);
 
 	if (
-		(bg && bg.date !== settings.cachedBackground?.date) ||
-		(bg && bg.theme !== settings.cachedBackground?.theme)
+		!settings.debugRefreshBackgroundOnOpen &&
+		((currentBg && currentBg.date !== settings.cachedBackground?.date) ||
+			(currentBg && currentBg.theme !== settings.cachedBackground?.theme))
 	) {
-		plugin.settings.cachedBackground = bg;
+		plugin.settings.cachedBackground = currentBg;
 		plugin.saveSettings();
 	}
 	const allVaultFiles = obsidian?.vault.getAllLoadedFiles();
@@ -172,6 +227,7 @@ const App = ({
 			BackgroundTheme.TRANSPARENT_WITH_SHADOWS &&
 			"beautitab-root--transparentWithShadows",
 		isBackgroundVisible && "beautitab-root--bg-visible",
+		isCrossfading && "beautitab-root--bg-crossfade",
 	]
 		.filter(Boolean)
 		.join(" ");

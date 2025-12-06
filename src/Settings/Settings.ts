@@ -32,6 +32,7 @@ export interface BeautitabPluginSettings {
 	backgroundTheme: BackgroundTheme;
 	customBackground: string;
 	localBackgrounds: string[];
+	debugRefreshBackgroundOnOpen: boolean;
 	showTopLeftSearchButton: boolean;
 	topLeftSearchProvider: SearchProvider;
 	showTime: boolean;
@@ -55,6 +56,7 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	backgroundTheme: BackgroundTheme.SEASONS_AND_HOLIDAYS,
 	customBackground: "",
 	localBackgrounds: [],
+	debugRefreshBackgroundOnOpen: false,
 	showTopLeftSearchButton: true,
 	topLeftSearchProvider: DEFAULT_SEARCH_PROVIDER,
 	showTime: true,
@@ -151,6 +153,24 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 			"Local background images"
 		);
 
+		new Setting(containerEl)
+			.setName("Debug: refresh background on every tab open")
+			.setDesc(
+				"Force-fetch a new background each time a Beautitab view opens. This bypasses cached backgrounds and may hit the API more often."
+			)
+			.addToggle((component) => {
+				component.setValue(
+					this.plugin.settings.debugRefreshBackgroundOnOpen
+				);
+				component.onChange((value) => {
+					this.plugin.settings.debugRefreshBackgroundOnOpen = value;
+					this.plugin.settingsObservable.setValue(
+						this.plugin.settings
+					);
+					this.plugin.saveSettings();
+				});
+			});
+
 		// @ts-ignore
 		if (!this.app.isMobile) {
 			localBackgroundImagesSetting.addButton((component) => {
@@ -188,7 +208,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 		localBackgroundImagesSetting.addButton((component) => {
 			component.setButtonText("Add vault image");
 			component.onClick(() => {
-				new ChooseImageSuggestModal(this.app, async (result) => {
+				new ChooseImageSuggestModal(this.app, async (result: any) => {
 					const fileData = await this.app.vault.readBinary(result);
 					const base64Data = arrayBufferToBase64(fileData);
 
@@ -206,7 +226,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 		});
 
 		this.plugin.settings.localBackgrounds.forEach(
-			(localBackground, index) => {
+			(localBackground: string, index: number) => {
 				const backgroundDiv = localBackgroundsDiv.createEl("div", {
 					cls: "beautitabsettings-localbackgrounds-background",
 				});
@@ -281,7 +301,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 					new ChooseSearchProvider(
 						this.app,
 						this.plugin.settings,
-						(result) => {
+						(result: SearchProvider) => {
 							this.plugin.settings.topLeftSearchProvider = result;
 							this.plugin.settingsObservable.setValue(
 								this.plugin.settings
@@ -329,7 +349,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 					new ChooseSearchProvider(
 						this.app,
 						this.plugin.settings,
-						(result) => {
+						(result: SearchProvider) => {
 							this.plugin.settings.inlineSearchProvider = result;
 							this.plugin.settingsObservable.setValue(
 								this.plugin.settings
@@ -498,9 +518,11 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				.setName("Bookmarks group")
 				.setDesc(`Which group should bookmarks be pulled from?`)
 				.addDropdown((component) => {
-					getBookmarkGroups(this.app).forEach((group) => {
-						component.addOption(group.title, group.path);
-					});
+					getBookmarkGroups(this.app).forEach(
+						(group: { title: string; path: string }) => {
+							component.addOption(group.title, group.path);
+						}
+					);
 
 					component.setValue(this.plugin.settings.bookmarkGroup);
 					component.onChange((value: BOOKMARK_SOURCE) => {
@@ -543,7 +565,8 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 			)
 			.addDropdown((component) => {
 				Object.values(QUOTE_SOURCE).forEach((source) => {
-					component.addOption(source, source);
+					const val = source as QUOTE_SOURCE;
+					component.addOption(val, val);
 				});
 
 				component.setValue(this.plugin.settings.quoteSource);
