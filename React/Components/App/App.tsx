@@ -46,6 +46,8 @@ const App = ({
 		settingsObservable.getValue()
 	);
 	const [bg, setBg] = useState<CachedBackground | null>(null);
+	const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
+	const hasShownBackgroundRef = useRef(false);
 	const [time, setTime] = useState(getTime(settings.timeFormat));
 	const mainDivRef = useRef<HTMLDivElement>(null);
 
@@ -79,6 +81,16 @@ const App = ({
 	useEffect(() => {
 		getResult();
 	}, [background]);
+
+	useEffect(() => {
+		if (!bg?.url) return;
+		if (!hasShownBackgroundRef.current) {
+			hasShownBackgroundRef.current = true;
+			requestAnimationFrame(() => setIsBackgroundVisible(true));
+			return;
+		}
+		setIsBackgroundVisible(true);
+	}, [bg?.url]);
 
 	if (
 		(bg && bg.date !== settings.cachedBackground?.date) ||
@@ -152,19 +164,21 @@ const App = ({
 		mainDivRef?.current?.focus();
 	}, []);
 
+	const rootClasses = [
+		"beautitab-root",
+		settings.backgroundTheme === BackgroundTheme.TRANSPARENT &&
+			"beautitab-root--transparent",
+		settings.backgroundTheme ===
+			BackgroundTheme.TRANSPARENT_WITH_SHADOWS &&
+			"beautitab-root--transparentWithShadows",
+		isBackgroundVisible && "beautitab-root--bg-visible",
+	]
+		.filter(Boolean)
+		.join(" ");
+
 	return (
 		<div
-			className={`beautitab-root ${
-				settings.backgroundTheme === BackgroundTheme.TRANSPARENT &&
-				"beautitab-root--transparent"
-			}
-			
-			${
-				settings.backgroundTheme ===
-					BackgroundTheme.TRANSPARENT_WITH_SHADOWS &&
-				"beautitab-root--transparentWithShadows"
-			}
-			`}
+			className={rootClasses}
 			style={backgroundStyle}
 			onKeyDown={(e) => {
 				if (!e.ctrlKey && !e.altKey && /^[A-Za-z0-9]$/.test(e.key)) {
