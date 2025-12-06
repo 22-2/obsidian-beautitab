@@ -1,6 +1,8 @@
 import { Notice, Platform, Plugin, InternalPluginName, requestUrl } from "obsidian";
 import { ReactView, BEAUTITAB_REACT_VIEW } from "./Views/ReactView";
 import Observable from "src/Utils/Observable";
+import { normalizeBackgroundCache } from "src/Utils/backgroundCache";
+import { migrateBackgroundCache } from "src/Utils/backgroundCacheStore";
 import {
 	BeautitabPluginSettingTab,
 	BeautitabPluginSettings,
@@ -64,7 +66,15 @@ export default class BeautitabPlugin extends Plugin {
 	 */
 	async loadSettings() {
 		const data = (await this.loadData()) || {};
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+		const merged = Object.assign({}, DEFAULT_SETTINGS, data);
+		merged.backgroundCache = normalizeBackgroundCache(merged.backgroundCache);
+
+		await migrateBackgroundCache(
+			merged.backgroundCache,
+			merged.cachedBackground
+		);
+
+		this.settings = merged;
 	}
 
 	/**

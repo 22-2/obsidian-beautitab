@@ -4,7 +4,7 @@ import { TFile, getIcon } from "obsidian";
 import getTime from "React/Utils/getTime";
 import Observable from "src/Utils/Observable";
 import BeautitabPlugin from "main";
-import getBackground from "React/Utils/getBackground";
+import getBackground, { GetBackgroundResult } from "React/Utils/getBackground";
 import getTimeOfDayGreeting from "React/Utils/getTimeOfDayGreeting";
 import { getBookmarks } from "React/Utils/getBookmarks";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
@@ -73,13 +73,13 @@ const App = ({
 	const mainDivRef = useRef<HTMLDivElement>(null);
 
 	const obsidian = useObsidian();
-	const background = useMemo(async () => {
+	const backgroundResult = useMemo(async () => {
 		return await getBackground(
 			settings.backgroundTheme,
 			settings.customBackground,
 			settings.localBackgrounds,
 			settings.apiKey,
-			settings.cachedBackground,
+			undefined,
 			settings.debugRefreshBackgroundOnOpen
 		);
 	}, [
@@ -87,7 +87,6 @@ const App = ({
 		settings.customBackground,
 		settings.localBackgrounds,
 		settings.apiKey,
-		settings.cachedBackground,
 		settings.debugRefreshBackgroundOnOpen,
 	]);
 
@@ -108,8 +107,11 @@ const App = ({
 			setCurrentBg(initialBg);
 		}
 
-		const bg = await background;
-		if (!bg?.url) return;
+		const result: GetBackgroundResult | null = await backgroundResult;
+		const bg = result?.background;
+		if (!bg?.url) {
+			return;
+		}
 		await preloadImage(bg.url);
 
 		// First load with no current background
@@ -119,7 +121,9 @@ const App = ({
 		}
 
 		// Same background, skip
-		if (currentBg.url === bg.url) return;
+		if (currentBg.url === bg.url) {
+			return;
+		}
 
 		// Crossfade: keep current, fade in incoming, then swap
 		setIncomingBg(bg);
@@ -134,7 +138,7 @@ const App = ({
 	};
 	useEffect(() => {
 		getResult();
-	}, [background]);
+	}, [backgroundResult]);
 
 	useEffect(() => {
 		if (!currentBg?.url && !incomingBg?.url) return;
@@ -146,13 +150,18 @@ const App = ({
 		setIsBackgroundVisible(true);
 	}, [currentBg?.url, incomingBg?.url]);
 
+	let shouldSave = false;
 	if (
 		!settings.debugRefreshBackgroundOnOpen &&
+		currentBg &&
 		((currentBg && currentBg.date !== settings.cachedBackground?.date) ||
 			(currentBg && currentBg.theme !== settings.cachedBackground?.theme))
 	) {
 		plugin.settings.cachedBackground = currentBg;
-		plugin.saveSettings();
+		shouldSave = true;
+	}
+	if (shouldSave) {
+		void plugin.saveSettings();
 	}
 	const allVaultFiles = obsidian?.vault.getAllLoadedFiles();
 	const latestModifiedMarkdownFiles = useMemo(() => {
