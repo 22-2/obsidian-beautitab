@@ -161,7 +161,8 @@ const App = ({
 			`}
 			// @ts-ignore
 			style={{
-				backgroundImage: `url("${bg?.url}")`,
+				// Avoid triggering fetches for undefined URLs while bg resolves
+				backgroundImage: bg?.url ? `url("${bg.url}")` : undefined,
 			}}
 			onKeyDown={(e) => {
 				if (!e.ctrlKey && !e.altKey && /^[A-Za-z0-9]$/.test(e.key)) {
