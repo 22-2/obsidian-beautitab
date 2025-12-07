@@ -1,7 +1,7 @@
 import fs from "fs";
 import { getBookmarkGroups } from "React/Utils/getBookmarks";
 import BeautitabPlugin from "main";
-import { App, PluginSettingTab, Setting, arrayBufferToBase64, sanitizeHTMLToDom } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, arrayBufferToBase64, sanitizeHTMLToDom } from "obsidian";
 import ChooseSearchProvider from "src/ChooseSearchProvider/ChooseSearchProvider";
 import CustomQuotesModel from "src/CustomQuotesModel/CustomQuotesModel";
 import {
@@ -10,7 +10,7 @@ import {
 	QUOTE_SOURCE,
 	TIME_FORMAT,
 } from "src/Types/Enums";
-import { CachedBackground, CustomQuote, SearchProvider } from "src/Types/Interfaces";
+import { BackgroundCache, CachedBackground, CustomQuote, SearchProvider } from "src/Types/Interfaces";
 import capitalizeFirstLetter from "src/Utils/capitalizeFirstLetter";
 import electron from "electron";
 import ConfirmModal from "src/ConfirmModal/ConfirmModal";
@@ -50,6 +50,7 @@ export interface BeautitabPluginSettings {
 	customQuotes: CustomQuote[];
 	apiKey: string;
 	cachedBackground?: CachedBackground;
+	backgroundCache?: BackgroundCache;
 }
 
 export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
@@ -73,6 +74,7 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	quoteSource: QUOTE_SOURCE.QUOTEABLE,
 	customQuotes: [],
 	apiKey: "",
+	backgroundCache: {},
 };
 
 export class BeautitabPluginSettingTab extends PluginSettingTab {
@@ -220,6 +222,21 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				}).open();
 			});
 		});
+
+		new Setting(containerEl)
+			.setName("Background cache")
+			.setDesc(
+				"Manage cached backgrounds that reduce repeated downloads. Clearing will force the next load to refetch."
+			)
+			.addButton((component) => {
+				component.setButtonText("Clear cache").onClick(() => {
+					this.plugin.settings.backgroundCache = {};
+					this.plugin.settings.cachedBackground = undefined;
+					this.plugin.saveSettings();
+					new Notice("Background cache cleared.");
+					this.display();
+				});
+			});
 
 		const localBackgroundsDiv = containerEl.createEl("div", {
 			cls: "beautitabsettings-localbackgrounds",

@@ -1,10 +1,22 @@
 import { BackgroundTheme } from "src/Types/Enums";
 import getEasterDate from "./getEasterDate";
-import { isWithinDaysBefore, isWithinHoursAfter } from "./isWithinXDays";
+import { isWithinDaysBefore } from "./isWithinXDays";
 import { createApi } from "unsplash-js";
 //@ts-ignore - This is a polyfill for fetch and work using --lib dom
 import { fetch as fetchPolyfill } from "whatwg-fetch";
-import { CachedBackground } from "../../src/Types/Interfaces";
+import {
+	BackgroundCache,
+	CachedBackground,
+	CachedBackgroundItem,
+} from "../../src/Types/Interfaces";
+import {
+	CACHE_BATCH_SIZE,
+	CACHE_MAX_ITEMS,
+	CACHE_TTL_MINUTES,
+	appendFetchedBackgrounds,
+	normalizeBackgroundCache,
+	takeCachedBackground,
+} from "src/Utils/backgroundCache";
 
 enum MONTH {
 	JANUARY = 1,
@@ -160,103 +172,194 @@ const getSeasonalTag = (date: Date) => {
  * @param backgroundTheme
  * @param customBackground
  */
+export interface GetBackgroundResult {
+	background: CachedBackground | null;
+	backgroundCache?: BackgroundCache;
+}
+
+const buildCachedBackground = (
+	item: CachedBackgroundItem | null | undefined
+): CachedBackground | null => {
+	if (!item) return null;
+	return {
+		url: maybeLowerQualityUnsplashUrl(item.url),
+		date: new Date(item.date),
+		theme: item.theme,
+	};
+};
+
 const getBackground = async (
 	backgroundTheme: BackgroundTheme,
 	customBackground: string,
 	localBackgrounds: string[],
 	apiKey: string,
-	cachedBackground?: CachedBackground,
+	backgroundCache?: BackgroundCache,
 	forceRefresh: boolean = false
-): Promise<CachedBackground | null> => {
+): Promise<GetBackgroundResult> => {
+	const now = new Date();
+	const cache = normalizeBackgroundCache(backgroundCache);
+	const cacheKey = (theme: BackgroundTheme, url?: string) =>
+		theme === BackgroundTheme.CUSTOM && url
+			? `custom:${url}`
+			: `unsplash:${theme}`;
 
 	switch (backgroundTheme) {
-		case BackgroundTheme.SEASONS_AND_HOLIDAYS:
-			if (
-				!forceRefresh &&
-				cachedBackground && cachedBackground.url.length > 0 && cachedBackground.theme === backgroundTheme &&
-				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())
-			)
+		case BackgroundTheme.SEASONS_AND_HOLIDAYS: {
+			const key = cacheKey(backgroundTheme);
+			const cached = takeCachedBackground(cache, key, {
+				now,
+				forceRefresh,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			if (cached?.background) {
 				return {
-					...cachedBackground,
-					url: maybeLowerQualityUnsplashUrl(cachedBackground.url),
+					background: buildCachedBackground(cached.background),
+					backgroundCache: cached.cache,
 				};
-			const seasonalTag = getSeasonalTag(new Date());
+			}
 
-			if (apiKey.length === 0) return null;
+			if (apiKey.length === 0) {
+				return { background: null, backgroundCache: cache };
+			}
 
+			const seasonalTag = getSeasonalTag(now);
 			const seasonHolidays = await createApi({
 				accessKey: apiKey,
 				fetch: fetchPolyfill,
-			}).photos.getRandom({
-				query: seasonalTag,
-				count: 1,
-			}).then((result) => {
-				return result.response;
-			});
+			})
+				.photos.getRandom({
+					query: seasonalTag,
+					count: CACHE_BATCH_SIZE,
+				})
+				.then((result) => result.response);
 
-			if (seasonHolidays) {
-				if (seasonHolidays instanceof Array) {
-					return {
-						url: maybeLowerQualityUnsplashUrl(seasonHolidays[0].urls.raw),
-						date: new Date(),
-						theme: backgroundTheme,
-					};
-				}
+			const items: CachedBackgroundItem[] = (seasonHolidays
+				? seasonHolidays instanceof Array
+					? seasonHolidays
+					: [seasonHolidays]
+				: []
+			).map((item) => ({
+				url: item.urls.raw,
+				date: now.toISOString(),
+				theme: backgroundTheme,
+			}));
+
+			const updatedCache = appendFetchedBackgrounds(cache, key, items, {
+				now,
+				maxItems: CACHE_MAX_ITEMS,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			const next = takeCachedBackground(updatedCache, key, {
+				now,
+				forceRefresh: false,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			return {
+				background: buildCachedBackground(next?.background ?? items[0]),
+				backgroundCache: next?.cache ?? updatedCache,
+			};
+		}
+		case BackgroundTheme.CUSTOM: {
+			const trimmed = customBackground?.trim();
+			if (!trimmed) {
+				return { background: null, backgroundCache: cache };
+			}
+			const key = cacheKey(backgroundTheme, trimmed);
+			const cached = takeCachedBackground(cache, key, {
+				now,
+				forceRefresh,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			if (cached?.background) {
 				return {
-					url: maybeLowerQualityUnsplashUrl(seasonHolidays.urls.raw),
-					date: new Date(),
-					theme: backgroundTheme,
+					background: buildCachedBackground(cached.background),
+					backgroundCache: cached.cache,
 				};
 			}
-			return null;
-		case BackgroundTheme.CUSTOM:
-			return { url: customBackground, date: new Date() };
-		case BackgroundTheme.LOCAL:
+			const customItem: CachedBackgroundItem = {
+				url: trimmed,
+				date: now.toISOString(),
+				theme: backgroundTheme,
+			};
 			return {
-				url: localBackgrounds[
-					Math.floor(Math.random() * localBackgrounds.length)],
-				date: new Date()
+				background: buildCachedBackground(customItem),
+				backgroundCache: appendFetchedBackgrounds(cache, key, [customItem], {
+					now,
+					maxItems: CACHE_MAX_ITEMS,
+					ttlMinutes: CACHE_TTL_MINUTES,
+				}),
+			};
+		}
+		case BackgroundTheme.LOCAL:
+			if (!localBackgrounds?.length) {
+				return { background: null, backgroundCache: cache };
+			}
+			return {
+				background: {
+					url: localBackgrounds[
+						Math.floor(Math.random() * localBackgrounds.length)
+					],
+					date: now,
+					theme: backgroundTheme,
+				},
+				backgroundCache: cache,
 			};
 		case BackgroundTheme.TRANSPARENT_WITH_SHADOWS:
 		case BackgroundTheme.TRANSPARENT:
-			return null;
-		default:
-			if (
-				!forceRefresh &&
-				cachedBackground && cachedBackground.url.length > 0 &&
-				backgroundTheme === cachedBackground.theme &&
-				!isWithinHoursAfter(new Date(cachedBackground.date), 1, new Date())
-			) return {
-				...cachedBackground,
-				url: maybeLowerQualityUnsplashUrl(cachedBackground.url),
-			};
+			return { background: null, backgroundCache: cache };
+		default: {
+			const key = cacheKey(backgroundTheme);
+			const cached = takeCachedBackground(cache, key, {
+				now,
+				forceRefresh,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			if (cached?.background) {
+				return {
+					background: buildCachedBackground(cached.background),
+					backgroundCache: cached.cache,
+				};
+			}
 
-			if (apiKey.length === 0) return null;
+			if (apiKey.length === 0) {
+				return { background: null, backgroundCache: cache };
+			}
 
 			const defRandom = await createApi({
 				accessKey: apiKey,
 				fetch: fetchPolyfill,
-			}).photos.getRandom({
-				count: 1,
-				query: backgroundTheme,
-			}).then((result) => {
-				return result.response;
+			})
+				.photos.getRandom({
+					count: CACHE_BATCH_SIZE,
+					query: backgroundTheme,
+				})
+				.then((result) => result.response);
+			const items: CachedBackgroundItem[] = (defRandom
+				? defRandom instanceof Array
+					? defRandom
+					: [defRandom]
+				: []
+			).map((item) => ({
+				url: item.urls.raw,
+				date: now.toISOString(),
+				theme: backgroundTheme,
+			}));
+
+			const updatedCache = appendFetchedBackgrounds(cache, key, items, {
+				now,
+				maxItems: CACHE_MAX_ITEMS,
+				ttlMinutes: CACHE_TTL_MINUTES,
 			});
-			if (defRandom) {
-				if (defRandom instanceof Array) {
-					return {
-						url: maybeLowerQualityUnsplashUrl(defRandom[0].urls.raw),
-						date: new Date(),
-						theme: backgroundTheme,
-					};
-				}
-				return {
-					url: maybeLowerQualityUnsplashUrl(defRandom.urls.raw),
-					date: new Date(),
-					theme: backgroundTheme,
-				};
-			}
-			return null;
+			const next = takeCachedBackground(updatedCache, key, {
+				now,
+				forceRefresh: false,
+				ttlMinutes: CACHE_TTL_MINUTES,
+			});
+			return {
+				background: buildCachedBackground(next?.background ?? items[0]),
+				backgroundCache: next?.cache ?? updatedCache,
+			};
+		}
 	}
 };
 

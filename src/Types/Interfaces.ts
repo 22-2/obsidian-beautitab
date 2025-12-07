@@ -17,6 +17,24 @@ export interface CachedBackground {
 	theme?: BackgroundTheme;
 }
 
+export interface CachedBackgroundItem {
+	url: string;
+	date: string;
+	theme?: BackgroundTheme;
+	attribution?: string;
+	width?: number;
+	height?: number;
+}
+
+export interface BackgroundCacheEntry {
+	items: CachedBackgroundItem[];
+	lastUsedIndex: number;
+	lastFetchedAt?: string;
+	ttlMinutes?: number;
+}
+
+export type BackgroundCache = Record<string, BackgroundCacheEntry>;
+
 declare global {
 	const i18next: i18n;
   }
