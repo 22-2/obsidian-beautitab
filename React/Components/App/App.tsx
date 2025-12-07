@@ -102,12 +102,6 @@ const App = ({
 		return style;
 	}, [currentBg?.url, incomingBg?.url]);
 	const getResult = async () => {
-		// Always paint quickly with whatever we already have cached
-		const initialBg = settings.cachedBackground ?? null;
-		if (initialBg && !currentBg?.url) {
-			setCurrentBg(initialBg);
-		}
-
 		const bg = await background;
 		if (!bg?.url) return;
 		await preloadImage(bg.url);
@@ -123,7 +117,8 @@ const App = ({
 
 		// Crossfade: keep current, fade in incoming, then swap
 		setIncomingBg(bg);
-		setIsCrossfading(true);
+		// Start crossfade on next frame to ensure CSS transition triggers
+		requestAnimationFrame(() => setIsCrossfading(true));
 		const timeout = window.setTimeout(() => {
 			setCurrentBg(bg);
 			setIncomingBg(null);
