@@ -4,7 +4,7 @@ import { TFile, getIcon } from "obsidian";
 import getTime from "React/Utils/getTime";
 import Observable from "src/Utils/Observable";
 import BeautitabPlugin from "main";
-import getBackground, { GetBackgroundResult } from "React/Utils/getBackground";
+import getBackground from "React/Utils/getBackground";
 import getTimeOfDayGreeting from "React/Utils/getTimeOfDayGreeting";
 import { getBookmarks } from "React/Utils/getBookmarks";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
@@ -64,13 +64,47 @@ const App = ({
 	const [settings, setSettings] = useState<BeautitabPluginSettings>(
 		settingsObservable.getValue()
 	);
-	const [currentBg, setCurrentBg] = useState<CachedBackground | null>(null);
+	const isCachedBackgroundUsable = useMemo(() => {
+		if (settings.debugRefreshBackgroundOnOpen) return false;
+		const cached = settings.cachedBackground;
+		if (!cached?.url) return false;
+		if (
+			settings.backgroundTheme === BackgroundTheme.TRANSPARENT ||
+			settings.backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
+		) {
+			return false;
+		}
+		if (cached.theme !== settings.backgroundTheme) return false;
+		if (settings.backgroundTheme === BackgroundTheme.CUSTOM) {
+			const trimmed = settings.customBackground?.trim();
+			return !!trimmed && trimmed === cached.url;
+		}
+		if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
+			return settings.localBackgrounds?.includes(cached.url) ?? false;
+		}
+		return true;
+	}, [
+		settings.debugRefreshBackgroundOnOpen,
+		settings.cachedBackground,
+		settings.backgroundTheme,
+		settings.customBackground,
+		settings.localBackgrounds,
+	]);
+
+	const [currentBg, setCurrentBg] = useState<CachedBackground | null>(
+		isCachedBackgroundUsable ? (settings.cachedBackground ?? null) : null
+	);
 	const [incomingBg, setIncomingBg] = useState<CachedBackground | null>(null);
 	const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
 	const [isCrossfading, setIsCrossfading] = useState(false);
 	const hasShownBackgroundRef = useRef(false);
+	const currentBgRef = useRef<CachedBackground | null>(null);
 	const [time, setTime] = useState(getTime(settings.timeFormat));
 	const mainDivRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		currentBgRef.current = currentBg;
+	}, [currentBg]);
 
 	const obsidian = useObsidian();
 	const backgroundResult = useMemo(async () => {
@@ -79,7 +113,7 @@ const App = ({
 			settings.customBackground,
 			settings.localBackgrounds,
 			settings.apiKey,
-			undefined,
+			settings.backgroundCache,
 			settings.debugRefreshBackgroundOnOpen
 		);
 	}, [
@@ -87,8 +121,15 @@ const App = ({
 		settings.customBackground,
 		settings.localBackgrounds,
 		settings.apiKey,
+		settings.backgroundCache,
 		settings.debugRefreshBackgroundOnOpen,
 	]);
+
+	useEffect(() => {
+		if (!isCachedBackgroundUsable) return;
+		if (currentBgRef.current?.url) return;
+		setCurrentBg(settings.cachedBackground ?? null);
+	}, [isCachedBackgroundUsable, settings.cachedBackground]);
 
 	const backgroundStyle = useMemo<Record<string, string> & React.CSSProperties>(() => {
 		const style: Record<string, string> & React.CSSProperties = {};
@@ -100,37 +141,61 @@ const App = ({
 		}
 		return style;
 	}, [currentBg?.url, incomingBg?.url]);
-	const getResult = async () => {
-		const bg = await background;
-		if (!bg?.url) return;
-		await preloadImage(bg.url);
-
-		// First load with no current background
-		if (!currentBg?.url) {
-			setCurrentBg(bg);
-			return;
-		}
-
-		// Same background, skip
-		if (currentBg.url === bg.url) {
-			return;
-		}
-
-		// Crossfade: keep current, fade in incoming, then swap
-		setIncomingBg(bg);
-		// Start crossfade on next frame to ensure CSS transition triggers
-		requestAnimationFrame(() => setIsCrossfading(true));
-		const timeout = window.setTimeout(() => {
-			setCurrentBg(bg);
-			setIncomingBg(null);
-			setIsCrossfading(false);
-		}, 500);
-
-		return () => window.clearTimeout(timeout);
-	};
 	useEffect(() => {
-		getResult();
-	}, [backgroundResult]);
+		let cancelled = false;
+		let timeout: number | undefined;
+
+		const run = async () => {
+			const result = await backgroundResult;
+			if (cancelled) return;
+			const bg = result.background;
+			if (!bg?.url) return;
+
+			// If we have an explicit cached background and debug refresh is off,
+			// keep it stable on tab open (avoid changing on every open).
+			if (
+				isCachedBackgroundUsable &&
+				settings.cachedBackground?.url &&
+				currentBgRef.current?.url === settings.cachedBackground.url
+			) {
+				return;
+			}
+
+			await preloadImage(bg.url);
+			if (cancelled) return;
+
+			const prev = currentBgRef.current;
+			// First load with no current background
+			if (!prev?.url) {
+				setCurrentBg(bg);
+				return;
+			}
+
+			// Same background, skip
+			if (prev.url === bg.url) {
+				return;
+			}
+
+			// Crossfade: keep current, fade in incoming, then swap
+			setIncomingBg(bg);
+			// Start crossfade on next frame to ensure CSS transition triggers
+			requestAnimationFrame(() => {
+				if (!cancelled) setIsCrossfading(true);
+			});
+			timeout = window.setTimeout(() => {
+				if (cancelled) return;
+				setCurrentBg(bg);
+				setIncomingBg(null);
+				setIsCrossfading(false);
+			}, 500);
+		};
+
+		void run();
+		return () => {
+			cancelled = true;
+			if (timeout) window.clearTimeout(timeout);
+		};
+	}, [backgroundResult, isCachedBackgroundUsable, settings.cachedBackground?.url]);
 
 	useEffect(() => {
 		if (!currentBg?.url && !incomingBg?.url) return;
@@ -146,8 +211,8 @@ const App = ({
 	if (
 		!settings.debugRefreshBackgroundOnOpen &&
 		currentBg &&
-		((currentBg && currentBg.date !== settings.cachedBackground?.date) ||
-			(currentBg && currentBg.theme !== settings.cachedBackground?.theme))
+		(currentBg.url !== settings.cachedBackground?.url ||
+			currentBg.theme !== settings.cachedBackground?.theme)
 	) {
 		plugin.settings.cachedBackground = currentBg;
 		shouldSave = true;
