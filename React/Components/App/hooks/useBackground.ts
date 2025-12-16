@@ -73,24 +73,6 @@ export const useBackground = (
 		currentBgRef.current = currentBg;
 	}, [currentBg]);
 
-	const backgroundResult = useMemo(async () => {
-		return await getBackground(
-			settings.backgroundTheme,
-			settings.customBackground,
-			settings.localBackgrounds,
-			settings.apiKey,
-			settings.backgroundCache,
-			settings.debugRefreshBackgroundOnOpen
-		);
-	}, [
-		settings.backgroundTheme,
-		settings.customBackground,
-		settings.localBackgrounds,
-		settings.apiKey,
-		settings.backgroundCache,
-		settings.debugRefreshBackgroundOnOpen,
-	]);
-
 	// Sync cached background
 	useEffect(() => {
 		if (!isCachedBackgroundUsable) return;
@@ -100,11 +82,22 @@ export const useBackground = (
 
 	// Handle background loading and crossfade
 	useEffect(() => {
+		// If cached background is usable, do not even attempt to fetch a new one.
+		// This prevents an API request on every tab open.
+		if (isCachedBackgroundUsable && settings.cachedBackground?.url) return;
+
 		let cancelled = false;
 		let timeout: number | undefined;
 
 		const run = async () => {
-			const result = await backgroundResult;
+			const result = await getBackground(
+				settings.backgroundTheme,
+				settings.customBackground,
+				settings.localBackgrounds,
+				settings.apiKey,
+				settings.backgroundCache,
+				settings.debugRefreshBackgroundOnOpen
+			);
 			if (cancelled) return;
 			const bg = result.background;
 			if (!bg?.url) return;
@@ -147,7 +140,16 @@ export const useBackground = (
 			cancelled = true;
 			if (timeout) window.clearTimeout(timeout);
 		};
-	}, [backgroundResult, isCachedBackgroundUsable, settings.cachedBackground?.url]);
+	}, [
+		isCachedBackgroundUsable,
+		settings.cachedBackground?.url,
+		settings.backgroundTheme,
+		settings.customBackground,
+		settings.localBackgrounds,
+		settings.apiKey,
+		settings.backgroundCache,
+		settings.debugRefreshBackgroundOnOpen,
+	]);
 
 	// Handle visibility state
 	useEffect(() => {
