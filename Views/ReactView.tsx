@@ -1,4 +1,4 @@
-import { App, FileView, WorkspaceLeaf } from "obsidian";
+import { App, FileView, TFile, WorkspaceLeaf } from "obsidian";
 import { Root, createRoot } from "react-dom/client";
 import ReactApp from "../React/Components/App/App";
 import { ObsidianContext } from "../React/Context/ObsidianAppContext";
@@ -25,6 +25,16 @@ export class ReactView extends FileView {
 		this.settingsObservable = settingsObservable;
 		this.allowNoFile = true;
 		this.plugin = plugin;
+		this.file = {
+			path: "beautitab-virtual.md",
+			name: "beautitab-virtual.md",
+			basename: "beautitab-virtual",
+			extension: "md",
+			vault: this.app.vault,
+			parent: null,
+			stat: { ctime: 0, mtime: 0, size: 0 },
+		} as unknown as TFile;
+		// Dummy file to satisfy FileView requirements
 	}
 
 	getViewType() {
