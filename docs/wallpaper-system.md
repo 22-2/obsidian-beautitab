@@ -98,9 +98,9 @@
 - URL ソースは 1 行 1 背景、保存時に `lastUsed` を付与してローテーションに利用。
 
 ## 12. Beautitab (Obsidian) の刷新ポイント
-- 新規 `backgroundCache` を IndexedDB に永続化（`idb-keyval` 使用）。`unsplash:<theme>` と `custom:<url>` キーで保存し、端末再起動後も残る。
+- 新規 `backgroundCache` を localStorage に永続化（`store2` 使用）。`unsplash:<theme>` と `custom:<url>` キーで保存し、端末再起動後も残る。
 - バッチ取得を導入 (`count=5`、上限15件キープ、TTL 60分)。キャッシュが新鮮ならネットワークなしで次の背景をローテーション。
 - `debugRefreshBackgroundOnOpen` を有効にしない限り、キャッシュを優先。キャッシュだけ更新した場合も即座に保存。
-- 背景キャッシュの管理 UI を設定画面に追加（クリアで IndexedDB と単一 `cachedBackground` をリセット）。
+- 背景キャッシュの管理 UI を設定画面に追加（クリアで localStorage と単一 `cachedBackground` をリセット）。
 
 以上が現行の壁紙取得・適用の全体フローです。
