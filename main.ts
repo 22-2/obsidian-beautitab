@@ -3,6 +3,7 @@ import { Notice, Platform, Plugin, requestUrl } from "obsidian";
 import { ReactView, BEAUTITAB_REACT_VIEW } from "./Views/ReactView";
 import Observable from "src/Utils/Observable";
 import { normalizeBackgroundCache } from "src/Utils/backgroundCache";
+import { QueryClient } from "@tanstack/react-query";
 import {
 	BeautitabPluginSettingTab,
 	BeautitabPluginSettings,
@@ -23,9 +24,12 @@ if (process.env.NODE_ENV === "development") {
 export default class BeautitabPlugin extends Plugin {
 	settings: BeautitabPluginSettings;
 	settingsObservable: Observable;
+	queryClient: QueryClient;
 
 	async onload() {
 		await this.loadSettings();
+
+		this.queryClient = new QueryClient();
 
 		this.versionCheck();
 

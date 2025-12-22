@@ -30,6 +30,7 @@
 		"whatwg-fetch": "^3.6.20"
 	},
 	"dependencies": {
+		"@tanstack/react-query": "^5.90.12",
 		"electron": "^39.2.3",
 		"esbuild-copy-static-files": "^0.1.0",
 		"esbuild-sass-plugin": "^3.3.1",

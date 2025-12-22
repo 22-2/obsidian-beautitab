@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { BackgroundTheme } from "src/Types/Enums";
 import { CachedBackground } from "src/Types/Interfaces";
@@ -6,10 +7,7 @@ import getBackground from "React/Utils/getBackground";
 import BeautitabPlugin from "main";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
 
-const QUEUE_KEY = "beautitab-bg-queue";
-const MIN_QUEUE_SIZE = 3;
 const CROSSFADE_DURATION = 500;
-const REPLENISH_DELAY = 2000;
 
 // ========== Helper Functions ==========
 
@@ -41,50 +39,6 @@ const isSameDate = (date1: Date, date2: Date): boolean => {
         date1.getMonth() === date2.getMonth() &&
         date1.getFullYear() === date2.getFullYear()
     );
-};
-
-// ========== Queue Management ==========
-
-const readQueue = (): CachedBackground[] => {
-    try {
-        const data = localStorage.getItem(QUEUE_KEY);
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        console.error("Error reading background queue", e);
-        return [];
-    }
-};
-
-const writeQueue = (queue: CachedBackground[]): void => {
-    try {
-        localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-    } catch (e) {
-        console.error("Error writing background queue", e);
-    }
-};
-
-const dequeueBackground = (theme: BackgroundTheme): CachedBackground | null => {
-    const queue = readQueue();
-    const index = queue.findIndex(item => item.theme === theme);
-    
-    if (index === -1) return null;
-    
-    const [bg] = queue.splice(index, 1);
-    writeQueue(queue);
-    return bg;
-};
-
-const enqueueBackground = (bg: CachedBackground): void => {
-    const queue = readQueue();
-    if (!queue.some(item => item.url === bg.url)) {
-        queue.push(bg);
-        writeQueue(queue);
-    }
-};
-
-const countQueueForTheme = (theme: BackgroundTheme): number => {
-    const queue = readQueue();
-    return queue.filter(item => item.theme === theme).length;
 };
 
 // ========== Background Validation ==========
@@ -138,12 +92,6 @@ const fetchNewBackground = async ({
     forceRefresh = false,
     plugin,
 }: FetchBackgroundParams): Promise<CachedBackground | null> => {
-    // Try queue first (unless debugging or forcing refresh)
-    if (!forceRefresh && !settings.debugRefreshBackgroundOnOpen) {
-        const queued = dequeueBackground(settings.backgroundTheme);
-        if (queued?.url) return queued;
-    }
-
     // Fallback to API
     const result = await getBackground(
         settings.backgroundTheme,
@@ -181,6 +129,8 @@ export const useBackground = (
     settings: BeautitabPluginSettings,
     plugin: BeautitabPlugin
 ): UseBackgroundResult => {
+    const queryClient = useQueryClient();
+
     // Memoized validation
     const isCachedUsable = useMemo(
         () =>
@@ -195,6 +145,15 @@ export const useBackground = (
         ]
     );
 
+    // 1. Main background query
+    const { data: fetchedBg, isSuccess } = useQuery({
+        queryKey: ["background", settings.backgroundTheme, settings.customBackground, settings.localBackgrounds],
+        queryFn: () => fetchNewBackground({ settings, plugin, forceRefresh: settings.debugRefreshBackgroundOnOpen }),
+        staleTime: 1000 * 60 * 60, // 1 hour
+        gcTime: 1000 * 60 * 60 * 24, // 24 hours
+        enabled: !isCachedUsable,
+    });
+
     // State
     const [currentBg, setCurrentBg] = useState<CachedBackground | null>(
         isCachedUsable ? settings.cachedBackground ?? null : null
@@ -206,38 +165,32 @@ export const useBackground = (
     // Refs
     const currentBgRef = useRef<CachedBackground | null>(null);
     const hasShownBackgroundRef = useRef(false);
-    const isReplenishingRef = useRef(false);
 
     useEffect(() => {
         currentBgRef.current = currentBg;
     }, [currentBg]);
 
-    // Sync cached background if usable
+    // 2. Prefetch next background
     useEffect(() => {
-        if (!isCachedUsable || currentBgRef.current?.url) return;
-        setCurrentBg(settings.cachedBackground ?? null);
-    }, [isCachedUsable, settings.cachedBackground]);
+        if (isSuccess && fetchedBg) {
+            // Prefetch for next time
+            queryClient.prefetchQuery({
+                queryKey: ["background", settings.backgroundTheme, "next"],
+                queryFn: () => fetchNewBackground({ settings, plugin, forceRefresh: true }),
+                staleTime: 1000 * 60 * 5,
+            });
+        }
+    }, [isSuccess, fetchedBg, queryClient, settings, plugin]);
 
-    // Load background with crossfade
+    // 3. Handle background updates and crossfade
     useEffect(() => {
-        if (isCachedUsable && settings.cachedBackground?.url) return;
+        const bg = isCachedUsable ? settings.cachedBackground : fetchedBg;
+        if (!bg?.url) return;
 
         let cancelled = false;
         let timeout: number | undefined;
 
-        const loadBackground = async () => {
-            const bg = await fetchNewBackground({ settings, plugin });
-            if (cancelled || !bg?.url) return;
-
-            // Skip if cached background became usable
-            if (
-                isCachedUsable &&
-                settings.cachedBackground?.url &&
-                currentBgRef.current?.url === settings.cachedBackground.url
-            ) {
-                return;
-            }
-
+        const updateBackground = async () => {
             const resolvedUrl = resolveUrl(bg.url, plugin);
             await preloadImage(resolvedUrl);
             if (cancelled) return;
@@ -267,70 +220,13 @@ export const useBackground = (
             }, CROSSFADE_DURATION);
         };
 
-        void loadBackground();
+        void updateBackground();
 
         return () => {
             cancelled = true;
             if (timeout) window.clearTimeout(timeout);
         };
-    }, [
-        isCachedUsable,
-        settings.cachedBackground?.url,
-        settings.backgroundTheme,
-        settings.customBackground,
-        settings.localBackgrounds,
-        settings.apiKey,
-        settings.backgroundCache,
-        settings.debugRefreshBackgroundOnOpen,
-        plugin,
-    ]);
-
-    // Replenish queue in background
-    useEffect(() => {
-        if (settings.debugRefreshBackgroundOnOpen) return;
-
-        const replenish = async () => {
-            if (isReplenishingRef.current) return;
-
-            const currentCount = countQueueForTheme(settings.backgroundTheme);
-            if (currentCount >= MIN_QUEUE_SIZE) return;
-
-            isReplenishingRef.current = true;
-
-            try {
-                const bg = await fetchNewBackground({ 
-                    settings, 
-                    forceRefresh: true,
-                    plugin 
-                });
-
-                if (bg?.url) {
-                    // Preload into browser cache
-                    const resolvedUrl = resolveUrl(bg.url, plugin);
-                    const img = new Image();
-                    img.src = resolvedUrl;
-                    
-                    // Add to queue
-                    enqueueBackground(bg);
-                }
-            } catch (e) {
-                console.error("Failed to replenish background queue", e);
-            } finally {
-                isReplenishingRef.current = false;
-            }
-        };
-
-        const timer = setTimeout(replenish, REPLENISH_DELAY);
-        return () => clearTimeout(timer);
-    }, [
-        settings.backgroundTheme,
-        settings.customBackground,
-        settings.localBackgrounds,
-        settings.apiKey,
-        settings.debugRefreshBackgroundOnOpen,
-        currentBg,
-        plugin,
-    ]);
+    }, [isCachedUsable, settings.cachedBackground, fetchedBg, plugin]);
 
     // Handle visibility
     useEffect(() => {

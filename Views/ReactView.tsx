@@ -1,5 +1,6 @@
 import { App, FileView, TFile, WorkspaceLeaf } from "obsidian";
 import { Root, createRoot } from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
 import ReactApp from "../React/Components/App/App";
 import { ObsidianContext } from "../React/Context/ObsidianAppContext";
 import Observable from "src/Utils/Observable";
@@ -52,12 +53,14 @@ export class ReactView extends FileView {
 	async onOpen() {
 		this.root = createRoot(this.contentEl);
 		this.root.render(
-			<ObsidianContext.Provider value={this.app}>
-				<ReactApp
-					settingsObservable={this.settingsObservable}
-					plugin={this.plugin}
-				/>
-			</ObsidianContext.Provider>
+			<QueryClientProvider client={this.plugin.queryClient}>
+				<ObsidianContext.Provider value={this.app}>
+					<ReactApp
+						settingsObservable={this.settingsObservable}
+						plugin={this.plugin}
+					/>
+				</ObsidianContext.Provider>
+			</QueryClientProvider>
 		);
 		this.containerEl.addClass("beautitab");
 	}
