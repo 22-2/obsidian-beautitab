@@ -48,6 +48,20 @@ export const useBackground = (
 			const trimmed = settings.customBackground?.trim();
 			return !!trimmed && trimmed === cached.url;
 		}
+
+		// If the cached background is not from today, we should refresh it.
+		if (cached.date) {
+			const cachedDate = new Date(cached.date);
+			const today = new Date();
+			if (
+				cachedDate.getDate() !== today.getDate() ||
+				cachedDate.getMonth() !== today.getMonth() ||
+				cachedDate.getFullYear() !== today.getFullYear()
+			) {
+				return false;
+			}
+		}
+
 		if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
 			return settings.localBackgrounds?.includes(cached.url) ?? false;
 		}
