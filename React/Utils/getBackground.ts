@@ -65,7 +65,7 @@ enum SEASONAL_THEME {
 const maybeLowerQualityUnsplashUrl = (url: string) => {
 	if (!url.includes("images.unsplash.com")) return url;
 	const separator = url.includes("?") ? "&" : "?";
-	return `${url}${separator}auto=format&fit=crop&w=1600&q=50`;
+	return `${url}${separator}auto=format&fit=crop&w=1600&q=20`;
 };
 
 /**
