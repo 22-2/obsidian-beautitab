@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { BackgroundTheme } from "src/Types/Enums";
@@ -7,277 +7,308 @@ import getBackground from "React/Utils/getBackground";
 import BeautitabPlugin from "main";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
 
-const CROSSFADE_DURATION = 500;
+// ========== Constants ==========
 
-// ========== Helper Functions ==========
+const CROSSFADE_DURATION = 500;
+const STALE_TIME = 1000 * 60 * 60; // 1 hour
+const GC_TIME = 1000 * 60 * 60 * 24; // 24 hours
+const PREFETCH_STALE_TIME = 1000 * 60 * 5; // 5 minutes
+
+// ========== Types ==========
+
+interface UseBackgroundResult {
+	currentBg: CachedBackground | null;
+	incomingBg: CachedBackground | null;
+	isBackgroundVisible: boolean;
+	isCrossfading: boolean;
+	backgroundStyle: Record<string, string> & React.CSSProperties;
+}
+
+interface FetchBackgroundParams {
+	settings: BeautitabPluginSettings;
+	forceRefresh?: boolean;
+	plugin: BeautitabPlugin;
+}
+
+// ========== Utility Functions ==========
 
 const resolveUrl = (url: string, plugin: BeautitabPlugin): string => {
-    if (!url) return "";
-    if (url.startsWith("http") || url.startsWith("data:")) return url;
-    return plugin.app.vault.adapter.getResourcePath(url);
+	if (!url || url.startsWith("http") || url.startsWith("data:")) return url;
+	return plugin.app.vault.adapter.getResourcePath(url);
 };
 
 const preloadImage = (url: string): Promise<void> => {
-    return new Promise((resolve) => {
-        let settled = false;
-        const finalize = () => {
-            if (settled) return;
-            settled = true;
-            resolve();
-        };
-        const img = new Image();
-        img.onload = finalize;
-        img.onerror = finalize;
-        img.src = url;
-        img.decode?.().then(finalize).catch(finalize);
-    });
+	return new Promise((resolve) => {
+		let settled = false;
+		const finalize = () => {
+			if (settled) return;
+			settled = true;
+			resolve();
+		};
+
+		const img = new Image();
+		img.onload = finalize;
+		img.onerror = finalize;
+		img.src = url;
+		img.decode?.().then(finalize).catch(finalize);
+	});
 };
 
 const isSameDate = (date1: Date, date2: Date): boolean => {
-    return (
-        date1.getDate() === date2.getDate() &&
-        date1.getMonth() === date2.getMonth() &&
-        date1.getFullYear() === date2.getFullYear()
-    );
+	return (
+		date1.getDate() === date2.getDate() &&
+		date1.getMonth() === date2.getMonth() &&
+		date1.getFullYear() === date2.getFullYear()
+	);
 };
 
-// ========== Background Validation ==========
+// ========== Validation Functions ==========
 
 const isTransparentTheme = (theme: BackgroundTheme): boolean => {
-    return (
-        theme === BackgroundTheme.TRANSPARENT ||
-        theme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
-    );
+	return (
+		theme === BackgroundTheme.TRANSPARENT ||
+		theme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
+	);
 };
 
 const isBackgroundFromToday = (bg: CachedBackground): boolean => {
-    if (!bg.date) return false;
-    const cachedDate = new Date(bg.date);
-    const today = new Date();
-    return isSameDate(cachedDate, today);
+	if (!bg.date) return false;
+	return isSameDate(new Date(bg.date), new Date());
 };
 
 const validateCachedBackground = (
-    cached: CachedBackground | undefined | null,
-    settings: BeautitabPluginSettings
+	cached: CachedBackground | undefined | null,
+	settings: BeautitabPluginSettings
 ): boolean => {
-    if (!cached?.url) return false;
-    if (isTransparentTheme(settings.backgroundTheme)) return false;
-    if (cached.theme !== settings.backgroundTheme) return false;
+	if (!cached?.url || isTransparentTheme(settings.backgroundTheme)) {
+		return false;
+	}
 
-    if (settings.backgroundTheme === BackgroundTheme.CUSTOM) {
-        const trimmed = settings.customBackground?.trim();
-        return !!trimmed && trimmed === cached.url;
-    }
+	if (cached.theme !== settings.backgroundTheme) return false;
 
-    if (!isBackgroundFromToday(cached)) return false;
+	// Custom background validation
+	if (settings.backgroundTheme === BackgroundTheme.CUSTOM) {
+		const trimmed = settings.customBackground?.trim();
+		return !!trimmed && trimmed === cached.url;
+	}
 
-    if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
-        return settings.localBackgrounds?.includes(cached.url) ?? false;
-    }
+	// Date-based themes require today's background
+	if (!isBackgroundFromToday(cached)) return false;
 
-    return true;
+	// Local background validation
+	if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
+		return settings.localBackgrounds?.includes(cached.url) ?? false;
+	}
+
+	return true;
 };
 
-// ========== Fetch Background ==========
-
-interface FetchBackgroundParams {
-    settings: BeautitabPluginSettings;
-    forceRefresh?: boolean;
-    plugin: BeautitabPlugin;
-}
+// ========== Background Fetching ==========
 
 const fetchNewBackground = async ({
-    settings,
-    forceRefresh = false,
-    plugin,
+	settings,
+	forceRefresh = false,
+	plugin,
 }: FetchBackgroundParams): Promise<CachedBackground | null> => {
-    // Fallback to API
-    const result = await getBackground(
-        settings.backgroundTheme,
-        settings.customBackground,
-        settings.localBackgrounds,
-        settings.apiKey,
-        settings.backgroundCache,
-        settings.debugRefreshBackgroundOnOpen || forceRefresh
-    );
+	const result = await getBackground(
+		settings.backgroundTheme,
+		settings.customBackground,
+		settings.localBackgrounds,
+		settings.apiKey,
+		settings.backgroundCache,
+		settings.debugRefreshBackgroundOnOpen || forceRefresh
+	);
 
-    if (result.background?.url && !result.background.url.startsWith("data:")) {
-        const cache = new LocalImageCache(plugin);
-        const localPath = await cache.saveImage(result.background.url);
-        if (localPath) {
-            result.background.url = localPath;
-        }
-    }
+	// Cache remote images locally
+	if (result.background?.url && !result.background.url.startsWith("data:")) {
+		const cache = new LocalImageCache(plugin);
+		const localPath = await cache.saveImage(result.background.url);
+		if (localPath) {
+			result.background.url = localPath;
+		}
+	}
 
-    return result.background;
+	return result.background;
 };
 
-// ========== Hook Interface ==========
-
-interface UseBackgroundResult {
-    currentBg: CachedBackground | null;
-    incomingBg: CachedBackground | null;
-    isBackgroundVisible: boolean;
-    isCrossfading: boolean;
-    backgroundStyle: Record<string, string> & React.CSSProperties;
-}
-
-// ========== Main Hook ==========
+// ========== Custom Hook ==========
 
 export const useBackground = (
-    settings: BeautitabPluginSettings,
-    plugin: BeautitabPlugin
+	settings: BeautitabPluginSettings,
+	plugin: BeautitabPlugin
 ): UseBackgroundResult => {
-    const queryClient = useQueryClient();
+	const queryClient = useQueryClient();
 
-    // Memoized validation
-    const isCachedUsable = useMemo(
-        () =>
-            !settings.debugRefreshBackgroundOnOpen &&
-            validateCachedBackground(settings.cachedBackground, settings),
-        [
-            settings.debugRefreshBackgroundOnOpen,
-            settings.cachedBackground,
-            settings.backgroundTheme,
-            settings.customBackground,
-            settings.localBackgrounds,
-        ]
-    );
+	// Determine if cached background is usable
+	const isCachedUsable = useMemo(
+		() =>
+			!settings.debugRefreshBackgroundOnOpen &&
+			validateCachedBackground(settings.cachedBackground, settings),
+		[
+			settings.debugRefreshBackgroundOnOpen,
+			settings.cachedBackground,
+			settings.backgroundTheme,
+			settings.customBackground,
+			settings.localBackgrounds,
+		]
+	);
 
-    // 1. Main background query
-    const { data: fetchedBg, isSuccess } = useQuery({
-        queryKey: ["background", settings.backgroundTheme, settings.customBackground, settings.localBackgrounds],
-        queryFn: () => fetchNewBackground({ settings, plugin, forceRefresh: settings.debugRefreshBackgroundOnOpen }),
-        staleTime: 1000 * 60 * 60, // 1 hour
-        gcTime: 1000 * 60 * 60 * 24, // 24 hours
-        enabled: !isCachedUsable,
-    });
+	// Fetch new background if needed
+	const { data: fetchedBg, isSuccess } = useQuery({
+		queryKey: [
+			"background",
+			settings.backgroundTheme,
+			settings.customBackground,
+			settings.localBackgrounds,
+		],
+		queryFn: () =>
+			fetchNewBackground({
+				settings,
+				plugin,
+				forceRefresh: settings.debugRefreshBackgroundOnOpen,
+			}),
+		staleTime: STALE_TIME,
+		gcTime: GC_TIME,
+		enabled: !isCachedUsable,
+	});
 
-    // State
-    const [currentBg, setCurrentBg] = useState<CachedBackground | null>(
-        isCachedUsable ? settings.cachedBackground ?? null : null
-    );
-    const [incomingBg, setIncomingBg] = useState<CachedBackground | null>(null);
-    const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
-    const [isCrossfading, setIsCrossfading] = useState(false);
+	// State management
+	const [currentBg, setCurrentBg] = useState<CachedBackground | null>(
+		isCachedUsable ? settings.cachedBackground ?? null : null
+	);
+	const [incomingBg, setIncomingBg] = useState<CachedBackground | null>(null);
+	const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
+	const [isCrossfading, setIsCrossfading] = useState(false);
 
-    // Refs
-    const currentBgRef = useRef<CachedBackground | null>(null);
-    const hasShownBackgroundRef = useRef(false);
+	// Refs for stable references
+	const currentBgRef = useRef<CachedBackground | null>(null);
+	const hasShownBackgroundRef = useRef(false);
 
-    useEffect(() => {
-        currentBgRef.current = currentBg;
-    }, [currentBg]);
+	// Keep ref in sync
+	useEffect(() => {
+		currentBgRef.current = currentBg;
+	}, [currentBg]);
 
-    // 2. Prefetch next background
-    useEffect(() => {
-        if (isSuccess && fetchedBg) {
-            // Prefetch for next time
-            queryClient.prefetchQuery({
-                queryKey: ["background", settings.backgroundTheme, "next"],
-                queryFn: () => fetchNewBackground({ settings, plugin, forceRefresh: true }),
-                staleTime: 1000 * 60 * 5,
-            });
-        }
-    }, [isSuccess, fetchedBg, queryClient, settings, plugin]);
+	// Prefetch next background
+	useEffect(() => {
+		if (!isSuccess || !fetchedBg) return;
 
-    // 3. Handle background updates and crossfade
-    useEffect(() => {
-        const bg = isCachedUsable ? settings.cachedBackground : fetchedBg;
-        if (!bg?.url) return;
+		queryClient.prefetchQuery({
+			queryKey: ["background", settings.backgroundTheme, "next"],
+			queryFn: () =>
+				fetchNewBackground({ settings, plugin, forceRefresh: true }),
+			staleTime: PREFETCH_STALE_TIME,
+		});
+	}, [isSuccess, fetchedBg, queryClient, settings, plugin]);
 
-        let cancelled = false;
-        let timeout: number | undefined;
+	// Handle background updates with crossfade
+	useEffect(() => {
+		const bg = isCachedUsable ? settings.cachedBackground : fetchedBg;
+		if (!bg?.url) return;
 
-        const updateBackground = async () => {
-            const resolvedUrl = resolveUrl(bg.url, plugin);
-            await preloadImage(resolvedUrl);
-            if (cancelled) return;
+		let cancelled = false;
+		let timeoutId: number | undefined;
 
-            const prev = currentBgRef.current;
+		const updateBackground = async () => {
+			const resolvedUrl = resolveUrl(bg.url, plugin);
+			await preloadImage(resolvedUrl);
 
-            // No previous background - set immediately
-            if (!prev?.url) {
-                setCurrentBg(bg);
-                return;
-            }
+			if (cancelled) return;
 
-            // Same URL - skip
-            if (prev.url === bg.url) return;
+			const prev = currentBgRef.current;
 
-            // Crossfade to new background
-            setIncomingBg(bg);
-            requestAnimationFrame(() => {
-                if (!cancelled) setIsCrossfading(true);
-            });
+			// Initial background - no crossfade needed
+			if (!prev?.url) {
+				setCurrentBg(bg);
+				return;
+			}
 
-            timeout = window.setTimeout(() => {
-                if (cancelled) return;
-                setCurrentBg(bg);
-                setIncomingBg(null);
-                setIsCrossfading(false);
-            }, CROSSFADE_DURATION);
-        };
+			// Same URL - no update needed
+			if (prev.url === bg.url) return;
 
-        void updateBackground();
+			// Initiate crossfade
+			setIncomingBg(bg);
+			requestAnimationFrame(() => {
+				if (!cancelled) setIsCrossfading(true);
+			});
 
-        return () => {
-            cancelled = true;
-            if (timeout) window.clearTimeout(timeout);
-        };
-    }, [isCachedUsable, settings.cachedBackground, fetchedBg, plugin]);
+			// Complete crossfade after duration
+			timeoutId = window.setTimeout(() => {
+				if (cancelled) return;
+				setCurrentBg(bg);
+				setIncomingBg(null);
+				setIsCrossfading(false);
+			}, CROSSFADE_DURATION);
+		};
 
-    // Handle visibility
-    useEffect(() => {
-        if (!currentBg?.url && !incomingBg?.url) return;
+		void updateBackground();
 
-        if (!hasShownBackgroundRef.current) {
-            hasShownBackgroundRef.current = true;
-            requestAnimationFrame(() => setIsBackgroundVisible(true));
-            return;
-        }
+		return () => {
+			cancelled = true;
+			if (timeoutId) window.clearTimeout(timeoutId);
+		};
+	}, [isCachedUsable, settings.cachedBackground, fetchedBg, plugin]);
 
-        setIsBackgroundVisible(true);
-    }, [currentBg?.url, incomingBg?.url]);
+	// Handle visibility animation
+	useEffect(() => {
+		if (!currentBg?.url && !incomingBg?.url) return;
 
-    // Save current background
-    useEffect(() => {
-        if (settings.debugRefreshBackgroundOnOpen || !currentBg) return;
+		if (!hasShownBackgroundRef.current) {
+			hasShownBackgroundRef.current = true;
+			requestAnimationFrame(() => setIsBackgroundVisible(true));
+			return;
+		}
 
-        if (
-            currentBg.url === settings.cachedBackground?.url &&
-            currentBg.theme === settings.cachedBackground?.theme
-        ) {
-            return;
-        }
+		setIsBackgroundVisible(true);
+	}, [currentBg?.url, incomingBg?.url]);
 
-        plugin.settings.cachedBackground = currentBg;
-        void plugin.saveSettings();
-    }, [
-        currentBg,
-        settings.cachedBackground,
-        settings.debugRefreshBackgroundOnOpen,
-        plugin,
-    ]);
+	// Persist current background to settings
+	useEffect(() => {
+		if (settings.debugRefreshBackgroundOnOpen || !currentBg) return;
 
-    // Generate CSS variables
-    const backgroundStyle = useMemo<Record<string, string> & React.CSSProperties>(() => {
-        const style: Record<string, string> & React.CSSProperties = {};
-        if (currentBg?.url) {
-            style["--beautitab-bg-url-current"] = `url("${resolveUrl(currentBg.url, plugin)}")`;
-        }
-        if (incomingBg?.url) {
-            style["--beautitab-bg-url-next"] = `url("${resolveUrl(incomingBg.url, plugin)}")`;
-        }
-        return style;
-    }, [currentBg?.url, incomingBg?.url, plugin]);
+		const isSameAsCached =
+			currentBg.url === settings.cachedBackground?.url &&
+			currentBg.theme === settings.cachedBackground?.theme;
 
-    return {
-        currentBg,
-        incomingBg,
-        isBackgroundVisible,
-        isCrossfading,
-        backgroundStyle,
-    };
+		if (isSameAsCached) return;
+
+		plugin.settings.cachedBackground = currentBg;
+		void plugin.saveSettings();
+	}, [
+		currentBg,
+		settings.cachedBackground,
+		settings.debugRefreshBackgroundOnOpen,
+		plugin,
+	]);
+
+	// Generate CSS custom properties
+	const backgroundStyle = useMemo<
+		Record<string, string> & React.CSSProperties
+	>(() => {
+		const style: Record<string, string> & React.CSSProperties = {};
+
+		if (currentBg?.url) {
+			style["--beautitab-bg-url-current"] = `url("${resolveUrl(
+				currentBg.url,
+				plugin
+			)}")`;
+		}
+
+		if (incomingBg?.url) {
+			style["--beautitab-bg-url-next"] = `url("${resolveUrl(
+				incomingBg.url,
+				plugin
+			)}")`;
+		}
+
+		return style;
+	}, [currentBg?.url, incomingBg?.url, plugin]);
+
+	return {
+		currentBg,
+		incomingBg,
+		isBackgroundVisible,
+		isCrossfading,
+		backgroundStyle,
+	};
 };
