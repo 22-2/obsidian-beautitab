@@ -29,3 +29,9 @@ export enum QUOTE_SOURCE {
 	MY_QUOTES = "My quotes",
 	BOTH = "Both",
 }
+
+export enum NEW_TAB_BEHAVIOR {
+	HIJACK = "Hijack empty tabs",
+	OVERRIDE = "Override New Tab command",
+	NONE = "None",
+}

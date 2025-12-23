@@ -4,11 +4,13 @@ import { ReactView, BEAUTITAB_REACT_VIEW } from "./Views/ReactView";
 import Observable from "src/Utils/Observable";
 import { normalizeBackgroundCache } from "src/Utils/backgroundCache";
 import { QueryClient } from "@tanstack/react-query";
+import { around } from "monkey-around";
 import {
 	BeautitabPluginSettingTab,
 	BeautitabPluginSettings,
 	DEFAULT_SETTINGS,
 } from "src/Settings/Settings";
+import { NEW_TAB_BEHAVIOR } from "src/Types/Enums";
 
 /**
  * This allows a "live-reload" of Obsidian when developing the plugin.
@@ -25,6 +27,7 @@ export default class BeautitabPlugin extends Plugin {
 	settings: BeautitabPluginSettings;
 	settingsObservable: Observable;
 	queryClient: QueryClient;
+	uninstallMonkeyPatch: () => void;
 
 	async onload() {
 		await this.loadSettings();
@@ -55,6 +58,8 @@ export default class BeautitabPlugin extends Plugin {
 			)
 		);
 
+		this.patchNewTab();
+
 		if (process.env.NODE_ENV === "development") {
 			if (process.env.EMULATE_MOBILE && !Platform.isMobile) {
 				this.app.emulateMobile(true);
@@ -68,6 +73,9 @@ export default class BeautitabPlugin extends Plugin {
 
 	onunload() {
 		console.log("unloading Beautitab");
+		if (this.uninstallMonkeyPatch) {
+			this.uninstallMonkeyPatch();
+		}
 	}
 
 	/**
@@ -128,12 +136,43 @@ export default class BeautitabPlugin extends Plugin {
 	 * Hijack new tabs and show Beauitab
 	 */
 	private onLayoutChange(): void {
+		if (this.settings.newTabBehavior !== NEW_TAB_BEHAVIOR.HIJACK) {
+			return;
+		}
 		const leaf = this.app.workspace.getMostRecentLeaf();
 		if (leaf?.getViewState().type === "empty") {
 			leaf.setViewState({
 				type: BEAUTITAB_REACT_VIEW,
 			});
 		}
+	}
+
+	/**
+	 * Patch the new tab command to show Beautitab
+	 */
+	private patchNewTab(): void {
+		this.uninstallMonkeyPatch = around(
+			(this.app as any).commands.commands["workspace:new-tab"],
+			{
+				checkCallback: (next: any) => {
+					return (checking: boolean) => {
+						if (
+							this.settings.newTabBehavior ===
+							NEW_TAB_BEHAVIOR.OVERRIDE
+						) {
+							if (!checking) {
+								this.app.workspace.getLeaf(true).setViewState({
+									type: BEAUTITAB_REACT_VIEW,
+									active: true,
+								});
+							}
+							return true;
+						}
+						return next ? next(checking) : false;
+					};
+				},
+			}
+		);
 	}
 
 	/**

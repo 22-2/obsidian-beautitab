@@ -7,6 +7,7 @@ import CustomQuotesModel from "src/CustomQuotesModel/CustomQuotesModel";
 import {
 	BOOKMARK_SOURCE,
 	BackgroundTheme,
+	NEW_TAB_BEHAVIOR,
 	QUOTE_SOURCE,
 	TIME_FORMAT,
 } from "src/Types/Enums";
@@ -49,6 +50,7 @@ export interface BeautitabPluginSettings {
 	quoteSource: QUOTE_SOURCE;
 	customQuotes: CustomQuote[];
 	apiKey: string;
+	newTabBehavior: NEW_TAB_BEHAVIOR;
 	cachedBackground?: CachedBackground;
 	backgroundCache?: BackgroundCache;
 }
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	quoteSource: QUOTE_SOURCE.QUOTEABLE,
 	customQuotes: [],
 	apiKey: "",
+	newTabBehavior: NEW_TAB_BEHAVIOR.HIJACK,
 	backgroundCache: {},
 };
 
@@ -89,6 +92,31 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 
 		containerEl.empty();
+
+		/****************************************
+		 * General settings
+		 ***************************************/
+		new Setting(containerEl).setHeading().setName(`General settings`);
+
+		new Setting(containerEl)
+			.setName("New tab behavior")
+			.setDesc(
+				`How should Beautitab handle new tabs? "Hijack empty tabs" will replace any empty tab with Beautitab. "Override New Tab command" will override the default Obsidian "New tab" command. "None" will do nothing.`
+			)
+			.addDropdown((component) => {
+				Object.values(NEW_TAB_BEHAVIOR).forEach((behavior) => {
+					component.addOption(behavior, behavior);
+				});
+
+				component.setValue(this.plugin.settings.newTabBehavior);
+				component.onChange((value: NEW_TAB_BEHAVIOR) => {
+					this.plugin.settings.newTabBehavior = value;
+					this.plugin.settingsObservable.setValue(
+						this.plugin.settings
+					);
+					this.plugin.saveSettings();
+				});
+			});
 
 		/****************************************
 		 * Background settings
