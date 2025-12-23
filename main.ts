@@ -31,6 +31,11 @@ export default class BeautitabPlugin extends Plugin {
 
 		this.queryClient = new QueryClient();
 
+		// Clear old background queue from localStorage if it exists
+		if (localStorage.getItem("beautitab-bg-queue")) {
+			localStorage.removeItem("beautitab-bg-queue");
+		}
+
 		this.versionCheck();
 
 		this.settingsObservable = new Observable(this.settings);

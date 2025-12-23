@@ -33,7 +33,10 @@ interface FetchBackgroundParams {
 // ========== Utility Functions ==========
 
 const resolveUrl = (url: string, plugin: BeautitabPlugin): string => {
-	if (!url || url.startsWith("http") || url.startsWith("data:")) return url;
+	if (!url) return "";
+	if (url.startsWith("http") || url.startsWith("data:")) return url;
+	// If it's already an app:// URL, return it as is
+	if (url.startsWith("app://")) return url;
 	return plugin.app.vault.adapter.getResourcePath(url);
 };
 
@@ -63,6 +66,12 @@ const isSameDate = (date1: Date, date2: Date): boolean => {
 };
 
 // ========== Validation Functions ==========
+
+const checkFileExists = async (url: string, plugin: BeautitabPlugin): Promise<boolean> => {
+	if (!url || url.startsWith("http") || url.startsWith("data:")) return true;
+	const cache = new LocalImageCache(plugin);
+	return await cache.exists(url);
+};
 
 const isTransparentTheme = (theme: BackgroundTheme): boolean => {
 	return (
@@ -125,6 +134,10 @@ const fetchNewBackground = async ({
 		const localPath = await cache.saveImage(result.background.url);
 		if (localPath) {
 			result.background.url = localPath;
+			// Prune cache occasionally (e.g. 10% chance)
+			if (Math.random() < 0.1) {
+				void cache.pruneCache();
+			}
 		}
 	}
 
@@ -154,7 +167,7 @@ export const useBackground = (
 	);
 
 	// Fetch new background if needed
-	const { data: fetchedBg, isSuccess } = useQuery({
+	const { data: fetchedBg, isSuccess, refetch } = useQuery({
 		queryKey: [
 			"background",
 			settings.backgroundTheme,
@@ -189,6 +202,21 @@ export const useBackground = (
 		currentBgRef.current = currentBg;
 	}, [currentBg]);
 
+	// Verify file existence for initial/cached background
+	useEffect(() => {
+		const verify = async () => {
+			if (currentBg?.url) {
+				const exists = await checkFileExists(currentBg.url, plugin);
+				if (!exists) {
+					console.warn("Beautitab: Cached background file missing, refetching...");
+					setCurrentBg(null);
+					void refetch();
+				}
+			}
+		};
+		void verify();
+	}, [plugin, refetch]);
+
 	// Prefetch next background
 	useEffect(() => {
 		if (!isSuccess || !fetchedBg) return;
@@ -211,6 +239,15 @@ export const useBackground = (
 
 		const updateBackground = async () => {
 			const resolvedUrl = resolveUrl(bg.url, plugin);
+			
+			// Check if file exists before preloading
+			const exists = await checkFileExists(bg.url, plugin);
+			if (!exists) {
+				console.warn("Beautitab: Background file missing during update, refetching...");
+				void refetch();
+				return;
+			}
+
 			await preloadImage(resolvedUrl);
 
 			if (cancelled) return;

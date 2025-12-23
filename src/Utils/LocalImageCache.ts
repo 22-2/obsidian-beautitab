@@ -1,4 +1,4 @@
-import { requestUrl, TAbstractFile } from "obsidian";
+import { requestUrl, TAbstractFile, normalizePath } from "obsidian";
 import BeautitabPlugin from "main";
 
 const CACHE_FOLDER_NAME = "bg-cache";
@@ -9,7 +9,7 @@ export class LocalImageCache {
 
     constructor(plugin: BeautitabPlugin) {
         this.plugin = plugin;
-        this.cacheDir = `${this.plugin.manifest.dir}/${CACHE_FOLDER_NAME}`;
+        this.cacheDir = normalizePath(`${this.plugin.manifest.dir}/${CACHE_FOLDER_NAME}`);
     }
 
     async init() {
@@ -26,15 +26,13 @@ export class LocalImageCache {
 
             // Check if it's already a local path
             if (url.startsWith("app://") || await adapter.exists(url)) {
-                return adapter.getResourcePath(url);
+                // If it exists, return the path (not the resource path, to be consistent)
+                return url;
             }
 
             // Generate a filename
-            // We can use a hash of the URL or just a timestamp. 
-            // Since we want to avoid duplicates if possible, maybe a simple hash?
-            // For now, let's use timestamp + random to be safe and simple.
             const filename = `bg-${Date.now()}-${Math.floor(Math.random() * 10000)}.jpg`;
-            const filePath = `${this.cacheDir}/${filename}`;
+            const filePath = normalizePath(`${this.cacheDir}/${filename}`);
 
             const response = await requestUrl({ url });
             if (response.status !== 200) return null;
@@ -52,40 +50,37 @@ export class LocalImageCache {
         return this.plugin.app.vault.adapter.getResourcePath(filePath);
     }
 
-    async cleanCache(keepFiles: string[]) {
+    async exists(filePath: string): Promise<boolean> {
+        if (!filePath) return false;
+        // app:// プロトコルが含まれている場合は、実パスを取り出す
+        let path = filePath;
+        if (filePath.startsWith("app://")) {
+            // app://<id>/<path> の形式からパス部分を抽出するのは難しいため、
+            // 基本的に保存時は相対パスで管理し、表示直前に resolve する運用にします。
+            return true; 
+        }
+        return await this.plugin.app.vault.adapter.exists(normalizePath(path));
+    }
+
+    async pruneCache() {
         try {
             const adapter = this.plugin.app.vault.adapter;
             if (!(await adapter.exists(this.cacheDir))) return;
 
             const result = await adapter.list(this.cacheDir);
             const files = result.files;
-            
-            // KeepFiles might be full resource paths or relative paths. 
-            // We need to be careful matching them.
-            // Let's assume keepFiles contains the resource paths we are currently using.
-            
+            const now = Date.now();
+            const ONE_DAY = 24 * 60 * 60 * 1000;
+            const MAX_AGE = 3 * ONE_DAY; // Keep for 3 days
+
             for (const file of files) {
-                const resourcePath = adapter.getResourcePath(file);
-                // If the file is not in the keep list, delete it.
-                // We should probably also check if it's very new (to avoid race conditions)
-                // But for now, let's just delete if not in keepFiles.
-                
-                // Actually, passing keepFiles is tricky because resource paths might change? 
-                // No, they are usually stable for a session.
-                
-                // Better strategy: Delete files older than X days? 
-                // Or just keep the last N files?
-                
-                // Let's just delete files that are not in the queue and not the current background.
-                // But the queue is in localStorage, so we can pass the list of "active" URLs.
-                
-                const isKept = keepFiles.some(k => k.includes(file)); // Simple check
-                if (!isKept) {
+                const stat = await adapter.stat(file);
+                if (stat && (now - stat.mtime > MAX_AGE)) {
                     await adapter.remove(file);
                 }
             }
         } catch (e) {
-            console.error("Beautitab: Error cleaning cache", e);
+            console.error("Beautitab: Error pruning cache", e);
         }
     }
 }
