@@ -80,9 +80,11 @@ const isTransparentTheme = (theme: BackgroundTheme): boolean => {
 	);
 };
 
-const isBackgroundFromToday = (bg: CachedBackground): boolean => {
+const isBackgroundFromCurrentHour = (bg: CachedBackground): boolean => {
 	if (!bg.date) return false;
-	return isSameDate(new Date(bg.date), new Date());
+	const bgDate = new Date(bg.date);
+	const now = new Date();
+	return isSameDate(bgDate, now) && bgDate.getHours() === now.getHours();
 };
 
 const validateCachedBackground = (
@@ -102,7 +104,7 @@ const validateCachedBackground = (
 	}
 
 	// Date-based themes require today's background
-	if (!isBackgroundFromToday(cached)) return false;
+	if (!isBackgroundFromCurrentHour(cached)) return false;
 
 	// Local background validation
 	if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
@@ -152,6 +154,10 @@ export const useBackground = (
 ): UseBackgroundResult => {
 	const queryClient = useQueryClient();
 
+	const now = new Date();
+	const currentHour = now.getHours();
+	const currentDay = now.toDateString();
+
 	// Determine if cached background is usable
 	const isCachedUsable = useMemo(
 		() =>
@@ -163,6 +169,8 @@ export const useBackground = (
 			settings.backgroundTheme,
 			settings.customBackground,
 			settings.localBackgrounds,
+			currentHour,
+			currentDay,
 		]
 	);
 
@@ -173,6 +181,8 @@ export const useBackground = (
 			settings.backgroundTheme,
 			settings.customBackground,
 			settings.localBackgrounds,
+			currentDay,
+			currentHour,
 		],
 		queryFn: () =>
 			fetchNewBackground({

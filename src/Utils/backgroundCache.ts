@@ -13,6 +13,17 @@ const clampIndex = (length: number, lastUsedIndex?: number): number => {
 const isFresh = (dateISO: string | Date, ttlMinutes: number, now: Date): boolean => {
 	const date = typeof dateISO === "string" ? new Date(dateISO) : dateISO;
 	if (Number.isNaN(date.getTime())) return false;
+
+	// If it's a different hour, it's not fresh (for the purpose of changing every hour)
+	if (
+		date.getHours() !== now.getHours() ||
+		date.getDate() !== now.getDate() ||
+		date.getMonth() !== now.getMonth() ||
+		date.getFullYear() !== now.getFullYear()
+	) {
+		return false;
+	}
+
 	const diffMs = now.getTime() - date.getTime();
 	return diffMs <= ttlMinutes * 60 * 1000;
 };
