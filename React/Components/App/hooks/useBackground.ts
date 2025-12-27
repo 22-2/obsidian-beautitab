@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { BackgroundTheme } from "src/Types/Enums";
 import { CachedBackground } from "src/Types/Interfaces";
-import getBackground from "React/Utils/getBackground";
 import BeautitabPlugin from "main";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
+import { fetchNewBackground } from "src/Utils/backgroundFetcher";
 
 // ========== Constants ==========
 
@@ -22,12 +22,6 @@ interface UseBackgroundResult {
 	isBackgroundVisible: boolean;
 	isCrossfading: boolean;
 	backgroundStyle: Record<string, string> & React.CSSProperties;
-}
-
-interface FetchBackgroundParams {
-	settings: BeautitabPluginSettings;
-	forceRefresh?: boolean;
-	plugin: BeautitabPlugin;
 }
 
 // ========== Utility Functions ==========
@@ -112,38 +106,6 @@ const validateCachedBackground = (
 	}
 
 	return true;
-};
-
-// ========== Background Fetching ==========
-
-const fetchNewBackground = async ({
-	settings,
-	forceRefresh = false,
-	plugin,
-}: FetchBackgroundParams): Promise<CachedBackground | null> => {
-	const result = await getBackground(
-		settings.backgroundTheme,
-		settings.customBackground,
-		settings.localBackgrounds,
-		settings.apiKey,
-		settings.backgroundCache,
-		settings.debugRefreshBackgroundOnOpen || forceRefresh
-	);
-
-	// Cache remote images locally
-	if (result.background?.url && !result.background.url.startsWith("data:")) {
-		const cache = new LocalImageCache(plugin);
-		const localPath = await cache.saveImage(result.background.url);
-		if (localPath) {
-			result.background.url = localPath;
-			// Prune cache occasionally (e.g. 10% chance)
-			if (Math.random() < 0.1) {
-				void cache.pruneCache();
-			}
-		}
-	}
-
-	return result.background;
 };
 
 // ========== Custom Hook ==========

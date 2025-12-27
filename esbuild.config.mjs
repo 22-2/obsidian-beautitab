@@ -3,6 +3,7 @@ import process from "process";
 import builtins from "builtin-modules";
 import { sassPlugin } from "esbuild-sass-plugin";
 import copyStaticFiles from "esbuild-copy-static-files";
+import inlineWorkerPlugin from "esbuild-plugin-inline-worker";
 import path from "path";
 import packageJson from "./package.json" with { type: "json" };
 import { writeFileSync } from "fs";
@@ -92,6 +93,7 @@ const context = await esbuild.context({
 	minify: prod,
 	metafile: prod,
 	plugins: [
+		inlineWorkerPlugin(),
 		sassPlugin(),
 		prod && preactResolvePlugin(),
 		copyStaticFiles({

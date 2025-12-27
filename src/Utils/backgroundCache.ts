@@ -83,6 +83,17 @@ export const takeCachedBackground = (
 	};
 };
 
+export const hasFreshBackground = (
+	cache: BackgroundCache,
+	key: string,
+	options: { now: Date; ttlMinutes?: number }
+): boolean => {
+	const entry = cache[key];
+	if (!entry) return false;
+	const ttl = options.ttlMinutes ?? entry.ttlMinutes ?? CACHE_TTL_MINUTES;
+	return entry.items.some((item) => isFresh(item.date, ttl, options.now));
+};
+
 export const appendFetchedBackgrounds = (
 	cache: BackgroundCache,
 	key: string,

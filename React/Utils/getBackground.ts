@@ -194,9 +194,9 @@ const getBackground = async (
 	localBackgrounds: string[],
 	apiKey: string,
 	backgroundCache?: BackgroundCache,
-	forceRefresh: boolean = false
+	forceRefresh: boolean = false,
+	now: Date = new Date()
 ): Promise<GetBackgroundResult> => {
-	const now = new Date();
 	const cache = normalizeBackgroundCache(backgroundCache);
 	const cacheKey = (theme: BackgroundTheme, url?: string) =>
 		theme === BackgroundTheme.CUSTOM && url
