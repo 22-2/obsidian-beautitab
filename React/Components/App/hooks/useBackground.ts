@@ -74,16 +74,19 @@ const isTransparentTheme = (theme: BackgroundTheme): boolean => {
 	);
 };
 
-const isBackgroundFromCurrentHour = (bg: CachedBackground): boolean => {
+const isBackgroundFromTargetHour = (
+	bg: CachedBackground,
+	target: Date
+): boolean => {
 	if (!bg.date) return false;
 	const bgDate = new Date(bg.date);
-	const now = new Date();
-	return isSameDate(bgDate, now) && bgDate.getHours() === now.getHours();
+	return isSameDate(bgDate, target) && bgDate.getHours() === target.getHours();
 };
 
 const validateCachedBackground = (
 	cached: CachedBackground | undefined | null,
-	settings: BeautitabPluginSettings
+	settings: BeautitabPluginSettings,
+	targetDate: Date = new Date()
 ): boolean => {
 	if (!cached?.url || isTransparentTheme(settings.backgroundTheme)) {
 		return false;
@@ -98,7 +101,7 @@ const validateCachedBackground = (
 	}
 
 	// Date-based themes require today's background
-	if (!isBackgroundFromCurrentHour(cached)) return false;
+	if (!isBackgroundFromTargetHour(cached, targetDate)) return false;
 
 	// Local background validation
 	if (settings.backgroundTheme === BackgroundTheme.LOCAL) {
@@ -116,15 +119,24 @@ export const useBackground = (
 ): UseBackgroundResult => {
 	const queryClient = useQueryClient();
 
+	const mountTime = useMemo(() => new Date(), []);
 	const now = new Date();
-	const currentHour = now.getHours();
-	const currentDay = now.toDateString();
+
+	const effectiveTime = settings.refreshBackgroundOnHourChange
+		? now
+		: mountTime;
+	const currentHour = effectiveTime.getHours();
+	const currentDay = effectiveTime.toDateString();
 
 	// Determine if cached background is usable
 	const isCachedUsable = useMemo(
 		() =>
 			!settings.debugRefreshBackgroundOnOpen &&
-			validateCachedBackground(settings.cachedBackground, settings),
+			validateCachedBackground(
+				settings.cachedBackground,
+				settings,
+				effectiveTime
+			),
 		[
 			settings.debugRefreshBackgroundOnOpen,
 			settings.cachedBackground,
@@ -151,6 +163,7 @@ export const useBackground = (
 				settings,
 				plugin,
 				forceRefresh: settings.debugRefreshBackgroundOnOpen,
+				now: effectiveTime,
 			}),
 		staleTime: STALE_TIME,
 		gcTime: GC_TIME,
