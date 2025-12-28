@@ -23,3 +23,6 @@ data.json
 
 # Remove local builds
 dist/
+e2e/playwright-report
+e2e/test-results
+*.txt

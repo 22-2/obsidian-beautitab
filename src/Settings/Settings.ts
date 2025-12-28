@@ -16,6 +16,9 @@ import capitalizeFirstLetter from "src/Utils/capitalizeFirstLetter";
 import electron from "electron";
 import ConfirmModal from "src/ConfirmModal/ConfirmModal";
 import ChooseImageSuggestModal from "src/ChooseImageSuggestModal/ChooseImageSuggestModal";
+import { LocalImageCache } from "src/Utils/LocalImageCache";
+import { clearBackgroundCache } from "src/Utils/backgroundCacheStore";
+import { setSettings } from "src/Utils/settingsStore";
 
 const DEFAULT_SEARCH_PROVIDER: SearchProvider = {
 	command: "switcher:open",
@@ -52,6 +55,7 @@ export interface BeautitabPluginSettings {
 	customQuotes: CustomQuote[];
 	apiKey: string;
 	newTabBehavior: NEW_TAB_BEHAVIOR;
+	enableLogging: boolean;
 	cachedBackground?: CachedBackground;
 	backgroundCache?: BackgroundCache;
 }
@@ -78,7 +82,8 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	quoteSource: QUOTE_SOURCE.QUOTEABLE,
 	customQuotes: [],
 	apiKey: "",
-	newTabBehavior: NEW_TAB_BEHAVIOR.HIJACK,
+	newTabBehavior: NEW_TAB_BEHAVIOR.OVERRIDE,
+	enableLogging: true,
 	backgroundCache: {},
 };
 
@@ -113,10 +118,21 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.newTabBehavior);
 				component.onChange((value: NEW_TAB_BEHAVIOR) => {
 					this.plugin.settings.newTabBehavior = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Enable logging")
+			.setDesc("Enable or disable plugin logs in the console.")
+			.addToggle((component) => {
+				component.setValue(this.plugin.settings.enableLogging);
+				component.onChange((value: boolean) => {
+					this.plugin.settings.enableLogging = value;
+					setSettings(this.plugin.settings);
+					this.plugin.saveSettings();
+					this.plugin.applyLogLevel();
 				});
 			});
 
@@ -133,9 +149,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.apiKey);
 				component.onChange((value) => {
 					this.plugin.settings.apiKey = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -155,10 +169,8 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 
 				component.onChange((value: BackgroundTheme) => {
 					this.plugin.settings.backgroundTheme = value;
-					
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -172,9 +184,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 					component.setValue(this.plugin.settings.customBackground);
 					component.onChange((value) => {
 						this.plugin.settings.customBackground = value;
-						this.plugin.settingsObservable.setValue(
-							this.plugin.settings
-						);
+						setSettings(this.plugin.settings);
 						this.plugin.saveSettings();
 						this.display();
 					});
@@ -196,9 +206,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				);
 				component.onChange((value) => {
 					this.plugin.settings.debugRefreshBackgroundOnOpen = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 				});
 			});
@@ -214,11 +222,53 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				);
 				component.onChange((value) => {
 					this.plugin.settings.refreshBackgroundOnHourChange = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 				});
+			});
+
+		new Setting(containerEl)
+			.setName("Clear background cache")
+			.setDesc(
+				"Delete all locally cached background images and reset the background history. This will force the plugin to fetch new images."
+			)
+			.addButton((button) => {
+				button
+					.setButtonText("Clear cache")
+					.setWarning()
+					.onClick(async () => {
+						const modal = new ConfirmModal(
+							this.app,
+							async () => {
+								// Clear local files
+								const imageCache = new LocalImageCache(
+									this.plugin
+								);
+								await imageCache.clearAll();
+
+								// Clear metadata cache
+								await clearBackgroundCache();
+
+								// Reset settings cache
+								this.plugin.settings.backgroundCache = {};
+								this.plugin.settings.cachedBackground =
+									undefined;
+								await this.plugin.saveSettings();
+
+								// Clear React Query cache
+								this.plugin.queryClient.clear();
+
+								setSettings(this.plugin.settings);
+
+								new Notice("Background cache cleared");
+								this.display();
+							},
+							"Clear background cache?",
+							"This will delete all downloaded background images and reset your background history. Are you sure?",
+							"Clear cache"
+						);
+						modal.open();
+					});
 			});
 
 		// @ts-ignore
@@ -270,21 +320,6 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				}).open();
 			});
 		});
-
-		new Setting(containerEl)
-			.setName("Background cache")
-			.setDesc(
-				"Manage cached backgrounds that reduce repeated downloads. Clearing will force the next load to refetch."
-			)
-			.addButton((component) => {
-				component.setButtonText("Clear cache").onClick(() => {
-					this.plugin.settings.backgroundCache = {};
-					this.plugin.settings.cachedBackground = undefined;
-					this.plugin.saveSettings();
-					new Notice("Background cache cleared.");
-					this.display();
-				});
-			});
 
 		const localBackgroundsDiv = containerEl.createEl("div", {
 			cls: "beautitabsettings-localbackgrounds",
@@ -339,9 +374,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				);
 				component.onChange((value) => {
 					this.plugin.settings.showTopLeftSearchButton = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -368,9 +401,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 						this.plugin.settings,
 						(result: SearchProvider) => {
 							this.plugin.settings.topLeftSearchProvider = result;
-							this.plugin.settingsObservable.setValue(
-								this.plugin.settings
-							);
+							setSettings(this.plugin.settings);
 							this.plugin.saveSettings();
 							this.display();
 						}
@@ -387,9 +418,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showInlineSearch);
 				component.onChange((value) => {
 					this.plugin.settings.showInlineSearch = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -416,9 +445,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 						this.plugin.settings,
 						(result: SearchProvider) => {
 							this.plugin.settings.inlineSearchProvider = result;
-							this.plugin.settingsObservable.setValue(
-								this.plugin.settings
-							);
+							setSettings(this.plugin.settings);
 							this.plugin.saveSettings();
 							this.display();
 						}
@@ -440,9 +467,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showTime);
 				component.onChange((value) => {
 					this.plugin.settings.showTime = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -465,9 +490,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 
 				component.onChange((value: TIME_FORMAT) => {
 					this.plugin.settings.timeFormat = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -487,9 +510,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showGreeting);
 				component.onChange((value) => {
 					this.plugin.settings.showGreeting = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -504,9 +525,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.greetingText);
 				component.onChange((value) => {
 					this.plugin.settings.greetingText = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 				});
 			});
@@ -525,9 +544,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showRecentFiles);
 				component.onChange((value) => {
 					this.plugin.settings.showRecentFiles = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -547,9 +564,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showBookmarks);
 				component.onChange((value) => {
 					this.plugin.settings.showBookmarks = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -570,9 +585,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.bookmarkSource);
 				component.onChange((value: BOOKMARK_SOURCE) => {
 					this.plugin.settings.bookmarkSource = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -592,9 +605,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 					component.setValue(this.plugin.settings.bookmarkGroup);
 					component.onChange((value: BOOKMARK_SOURCE) => {
 						this.plugin.settings.bookmarkGroup = value;
-						this.plugin.settingsObservable.setValue(
-							this.plugin.settings
-						);
+						setSettings(this.plugin.settings);
 						this.plugin.saveSettings();
 						this.display();
 					});
@@ -615,9 +626,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.showQuote);
 				component.onChange((value) => {
 					this.plugin.settings.showQuote = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});
@@ -637,9 +646,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				component.setValue(this.plugin.settings.quoteSource);
 				component.onChange((value: QUOTE_SOURCE) => {
 					this.plugin.settings.quoteSource = value;
-					this.plugin.settingsObservable.setValue(
-						this.plugin.settings
-					);
+					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();
 				});

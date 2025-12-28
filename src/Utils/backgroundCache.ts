@@ -52,33 +52,28 @@ export const takeCachedBackground = (
 	const entry = cache[key];
 	if (!entry) return null;
 	if (options.forceRefresh) return { cache };
+
 	const ttl = options.ttlMinutes ?? entry.ttlMinutes ?? CACHE_TTL_MINUTES;
 	const now = options.now;
 	const freshItems = entry.items.filter((item) => isFresh(item.date, ttl, now));
+
 	if (!freshItems.length) {
 		return {
 			cache: {
 				...cache,
-				[key]: {
-					...entry,
-					items: [],
-					lastUsedIndex: -1,
-				},
+				[key]: { ...entry, items: [], lastUsedIndex: -1 },
 			},
 		};
 	}
 
 	const nextIndex = clampIndex(freshItems.length, entry.lastUsedIndex + 1);
 	const background = freshItems[nextIndex];
+
 	return {
 		background,
 		cache: {
 			...cache,
-			[key]: {
-				...entry,
-				items: freshItems,
-				lastUsedIndex: nextIndex,
-			},
+			[key]: { ...entry, items: freshItems, lastUsedIndex: nextIndex },
 		},
 	};
 };
@@ -103,20 +98,18 @@ export const appendFetchedBackgrounds = (
 	const existing = cache[key];
 	const ttl = options.ttlMinutes ?? existing?.ttlMinutes ?? CACHE_TTL_MINUTES;
 	const nowISO = options.now.toISOString();
+
 	const normalizedNew = items
 		.filter((item) => !!item.url)
-		.map((item) => ({
-			...item,
-			date: item.date ?? nowISO,
-		}));
+		.map((item) => ({ ...item, date: item.date ?? nowISO }));
 
 	const combined = [...normalizedNew, ...(existing?.items ?? [])];
 	const seen = new Set<string>();
 	const deduped: CachedBackgroundItem[] = [];
+
 	for (const item of combined) {
-		const keyUrl = item.url;
-		if (seen.has(keyUrl)) continue;
-		seen.add(keyUrl);
+		if (seen.has(item.url)) continue;
+		seen.add(item.url);
 		deduped.push(item);
 	}
 

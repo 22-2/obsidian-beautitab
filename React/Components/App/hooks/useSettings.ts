@@ -1,25 +1,8 @@
-import { useState, useEffect } from "react";
-import { BeautitabPluginSettings } from "src/Settings/Settings";
-import Observable from "src/Utils/Observable";
+import { useAtomValue } from "jotai";
+import { BeautitabPluginSettings, DEFAULT_SETTINGS } from "src/Settings/Settings";
+import { settingsAtom, settingsStore } from "src/Utils/settingsStore";
 
-export const useSettings = (
-	settingsObservable: Observable
-): BeautitabPluginSettings => {
-	const [settings, setSettings] = useState<BeautitabPluginSettings>(
-		settingsObservable.getValue()
-	);
-
-	useEffect(() => {
-		const unsubscribe = settingsObservable.onChange(
-			(newSettings: BeautitabPluginSettings) => {
-				setSettings(newSettings);
-			}
-		);
-
-		return () => {
-			unsubscribe();
-		};
-	}, [settingsObservable]);
-
-	return settings;
+export const useSettings = (): BeautitabPluginSettings => {
+	const settings = useAtomValue(settingsAtom, { store: settingsStore });
+	return settings ?? DEFAULT_SETTINGS;
 };

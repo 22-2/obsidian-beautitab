@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
 import { useObsidian } from "../../Context/ObsidianAppContext";
 import { TFile } from "obsidian";
-import Observable from "src/Utils/Observable";
 import BeautitabPlugin from "main";
 import { getBookmarks } from "React/Utils/getBookmarks";
 import { BackgroundTheme } from "src/Types/Enums";
@@ -26,16 +25,15 @@ import {
 } from "./components";
 
 interface AppProps {
-	settingsObservable: Observable;
 	plugin: BeautitabPlugin;
 }
 
-const App: React.FC<AppProps> = ({ settingsObservable, plugin }) => {
+const App: React.FC<AppProps> = ({ plugin }) => {
 	const mainDivRef = useRef<HTMLDivElement>(null);
 	const obsidian = useObsidian();
 
 	// Custom hooks
-	const settings = useSettings(settingsObservable);
+	const settings = useSettings();
 	const time = useTime(settings.timeFormat);
 	const quote = useQuote(settings.quoteSource, settings.customQuotes);
 	const {

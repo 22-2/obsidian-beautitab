@@ -1,6 +1,7 @@
 {
 	"name": "obsidian-beautitab",
 	"version": "1.6.1",
+	"type": "module",
 	"description": "A plugin for Obsidian.MD that creates a customizable new tab view with beautiful backgrounds, quotes, search, and more.",
 	"main": "dist/main.js",
 	"scripts": {
@@ -14,6 +15,7 @@
 	"author": "Andrew McGivery",
 	"license": "MIT",
 	"devDependencies": {
+		"@playwright/test": "^1.56.0",
 		"@types/electron": "npm:@ophidian/electron-types@^24.3.1",
 		"@types/node": "^24.10.1",
 		"@types/obsidian-typings": "npm:obsidian-typings@^4.68.0",
@@ -27,6 +29,7 @@
 		"esbuild-plugin-inline-worker": "^0.1.1",
 		"i18next": "^25.6.3",
 		"obsidian": "latest",
+		"playwright": "^1.56.0",
 		"tslib": "2.8.1",
 		"typescript": "5.9.3",
 		"unsplash-js": "^7.0.20",
@@ -38,7 +41,11 @@
 		"electron": "^39.2.3",
 		"esbuild-copy-static-files": "^0.1.0",
 		"esbuild-sass-plugin": "^3.3.1",
+		"fnv1a": "^1.1.1",
+		"jotai": "^2.16.1",
+		"loglevel": "^1.9.2",
 		"monkey-around": "^3.0.0",
+		"obsidian-e2e-toolkit": "git+https://github.com/22-2/obsidian-e2e-toolkit.git",
 		"preact": "^10.28.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",

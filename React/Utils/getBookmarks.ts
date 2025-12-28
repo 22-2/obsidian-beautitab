@@ -1,6 +1,7 @@
 import { App, TAbstractFile } from "obsidian";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { BOOKMARK_SOURCE } from "src/Types/Enums";
+import logger from "src/Utils/logger";
 
 /**
  * Recursively gets all bookmarks
@@ -32,9 +33,9 @@ const getBookmarksByGroupName = (title: string, items: any[]) => {
 
 	items.forEach((item) => {
 		if (item.type === "group") {
-			console.log(`Found group with title ${item.title}`);
+			logger.debug(`Found group with title ${item.title}`);
 			if (item.title === title) {
-				console.log("found match!", item.items);
+				logger.debug("found match!", item.items);
 				flattedBookmarks = flattenBookmarks(item.items);
 			} else {
 				const bookmarks = getBookmarksByGroupName(title, item.items);

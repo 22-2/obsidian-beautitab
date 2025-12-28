@@ -17,6 +17,7 @@ import {
 	normalizeBackgroundCache,
 	takeCachedBackground,
 } from "src/Utils/backgroundCache";
+import logger from "src/Utils/logger";
 
 enum MONTH {
 	JANUARY = 1,
@@ -64,8 +65,19 @@ enum SEASONAL_THEME {
  */
 const maybeLowerQualityUnsplashUrl = (url: string) => {
 	if (!url.includes("images.unsplash.com")) return url;
-	const separator = url.includes("?") ? "&" : "?";
-	return `${url}${separator}auto=format&fit=crop&w=1600&q=20`;
+	try {
+		const u = new URL(url);
+		// Keep existing query params (ixid/ixlib) for access control, but override format/quality
+		// u.search = ""; // Don't clear search - it breaks signature/access for some URLs
+		u.searchParams.set("auto", "format");
+		u.searchParams.set("fit", "crop");
+		u.searchParams.set("w", "1600");
+		u.searchParams.set("q", "20");
+		return u.toString();
+	} catch {
+		const separator = url.includes("?") ? "&" : "?";
+		return `${url}${separator}auto=format&fit=crop&w=1600&q=20`;
+	}
 };
 
 /**
@@ -197,13 +209,21 @@ const getBackground = async (
 	forceRefresh: boolean = false,
 	now: Date = new Date()
 ): Promise<GetBackgroundResult> => {
-	const cache = normalizeBackgroundCache(backgroundCache);
-	const cacheKey = (theme: BackgroundTheme, url?: string) =>
-		theme === BackgroundTheme.CUSTOM && url
-			? `custom:${url}`
-			: `unsplash:${theme}`;
+	try {
+		logger.debug("Beautitab: getBackground called", {
+			backgroundTheme,
+			customBackground,
+			forceRefresh,
+			now: now.toISOString(),
+		});
 
-	switch (backgroundTheme) {
+		const cache = normalizeBackgroundCache(backgroundCache);
+		const cacheKey = (theme: BackgroundTheme, url?: string) =>
+			theme === BackgroundTheme.CUSTOM && url
+				? `custom:${url}`
+				: `unsplash:${theme}`;
+
+		switch (backgroundTheme) {
 		case BackgroundTheme.SEASONS_AND_HOLIDAYS: {
 			const key = cacheKey(backgroundTheme);
 			const cached = takeCachedBackground(cache, key, {
@@ -239,7 +259,7 @@ const getBackground = async (
 					: [seasonHolidays]
 				: []
 			).map((item) => ({
-				url: item.urls.raw,
+				url: maybeLowerQualityUnsplashUrl(item.urls.raw),
 				date: now.toISOString(),
 				theme: backgroundTheme,
 			}));
@@ -281,7 +301,8 @@ const getBackground = async (
 				date: now.toISOString(),
 				theme: backgroundTheme,
 			};
-			return {
+            logger.debug("Beautitab: Returning custom background item", customItem);
+			const result = {
 				background: buildCachedBackground(customItem),
 				backgroundCache: appendFetchedBackgrounds(cache, key, [customItem], {
 					now,
@@ -289,6 +310,8 @@ const getBackground = async (
 					ttlMinutes: CACHE_TTL_MINUTES,
 				}),
 			};
+			logger.debug("Beautitab: Custom background result", result);
+			return result;
 		}
 		case BackgroundTheme.LOCAL:
 			if (!localBackgrounds?.length) {
@@ -340,7 +363,7 @@ const getBackground = async (
 					: [defRandom]
 				: []
 			).map((item) => ({
-				url: item.urls.raw,
+				url: maybeLowerQualityUnsplashUrl(item.urls.raw),
 				date: now.toISOString(),
 				theme: backgroundTheme,
 			}));
@@ -360,6 +383,11 @@ const getBackground = async (
 				backgroundCache: next?.cache ?? updatedCache,
 			};
 		}
+		}
+	} catch (error) {
+		logger.error("Beautitab: Error in getBackground", error);
+		const cache = normalizeBackgroundCache(backgroundCache);
+		return { background: null, backgroundCache: cache };
 	}
 };
 
