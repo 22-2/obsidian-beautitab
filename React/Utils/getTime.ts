@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { TIME_FORMAT } from "React/Components/App/hooks/background/types";
 
 /**
@@ -5,21 +6,12 @@ import { TIME_FORMAT } from "React/Components/App/hooks/background/types";
  */
 const getTime = (timeFormat: TIME_FORMAT) => {
 	const today = new Date();
-	let hours;
+
 	if (timeFormat === TIME_FORMAT.TWELVE_HOUR) {
-		hours =
-			today.getHours() > 12
-				? today.getHours() - 12
-				: today.getHours() === 0
-				? 12
-				: today.getHours();
+		return format(today, "h:mm");
 	} else {
-		hours = today.getHours().toString().padStart(2, "0");
+		return format(today, "HH:mm");
 	}
-
-	const minutes = today.getMinutes().toString().padStart(2, "0");
-
-	return `${hours}:${minutes}`;
 };
 
 export default getTime;

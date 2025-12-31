@@ -1,3 +1,5 @@
+import { addDays, setDate, setMonth, getDay } from "date-fns";
+
 /**
  * An incredibly silly calculation to figure out when Easter is. I can't believe this is a thing.
  * @param year
@@ -30,16 +32,16 @@ const getEasterDate = (year: number) => {
 	}
 
 	// Step 8: Calculate the date of the March equinox (March 21)
-	const marchEquinox = new Date(year, 2, 21); // Note: Months are 0-based in JavaScript
+	let marchEquinox = new Date(year, 0, 1);
+	marchEquinox = setMonth(marchEquinox, 2); // March
+	marchEquinox = setDate(marchEquinox, 21);
 
 	// Step 9: Calculate the Full Moon
-	const fullMoon = new Date(marchEquinox);
-	fullMoon.setDate(marchEquinox.getDate() + E);
+	const fullMoon = addDays(marchEquinox, E);
 
 	// Step 10: Calculate the Sunday following the Full Moon (Easter)
-	const daysToSunday = (7 - fullMoon.getDay()) % 7;
-	const easterDate = new Date(fullMoon);
-	easterDate.setDate(fullMoon.getDate() + daysToSunday);
+	const daysToSunday = (7 - getDay(fullMoon)) % 7;
+	const easterDate = addDays(fullMoon, daysToSunday);
 
 	return easterDate;
 };

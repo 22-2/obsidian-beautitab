@@ -1,10 +1,9 @@
 import {
 	isBefore,
-	differenceInMilliseconds,
+	differenceInDays,
 	getMonth,
 	getDate,
 	getYear,
-	isSameDay,
 } from "date-fns";
 
 // ============================================================================
@@ -19,8 +18,7 @@ export const isWithinDaysBefore = (
 	days: number,
 	dateB: Date
 ): boolean => {
-	const daysInMilliseconds = days * 24 * 60 * 60 * 1000;
-	return isBefore(dateA, dateB) && differenceInMilliseconds(dateB, dateA) <= daysInMilliseconds;
+	return isBefore(dateA, dateB) && differenceInDays(dateB, dateA) < days;
 };
 
 /**

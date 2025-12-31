@@ -1,9 +1,11 @@
+import { getHours } from "date-fns";
+
 /**
  * Depending on the time of the day, returns a greeting like "Good morning"
  * @returns
  */
 const getTimeOfDayGreeting = () => {
-	const hours = new Date().getHours();
+	const hours = getHours(new Date());
 
 	if (hours >= 18 || hours < 5) {
 		return "Good evening";

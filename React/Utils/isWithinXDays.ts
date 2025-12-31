@@ -1,3 +1,11 @@
+import {
+	differenceInMilliseconds,
+	isAfter,
+	isBefore,
+	startOfDay,
+	getHours,
+} from "date-fns";
+
 /**
  * Returns true if dateA within X days of dateB (dateB minus X)
  * @param dateA
@@ -9,17 +17,12 @@ export const isWithinDaysBefore = (
 	days: number,
 	dateB: Date
 ): boolean => {
-	const timestampA: number = dateA.getTime();
-	const timestampB: number = dateB.getTime();
-	const daysInMilliseconds: number = days * 24 * 60 * 60 * 1000;
-
-	return (
-		timestampA < timestampB && timestampB - timestampA <= daysInMilliseconds
-	);
+	const daysInMilliseconds = days * 24 * 60 * 60 * 1000;
+	return isBefore(dateA, dateB) && differenceInMilliseconds(dateB, dateA) <= daysInMilliseconds;
 };
 
 /**
- * Returns true if dateA within 5 days of dateB (dateB plus 5)
+ * Returns true if dateA within X days of dateB (dateB plus X)
  * @param dateA
  * @param days
  * @param dateB
@@ -30,13 +33,8 @@ export const isWithinDaysAfter = (
 	days: number,
 	dateB: Date
 ): boolean => {
-	const timestampA: number = dateA.getTime();
-	const timestampB: number = dateB.getTime();
-	const daysInMilliseconds: number = days * 24 * 60 * 60 * 1000;
-
-	return (
-		timestampB < timestampA && timestampA - timestampB <= daysInMilliseconds
-	);
+	const daysInMilliseconds = days * 24 * 60 * 60 * 1000;
+	return isAfter(dateA, dateB) && differenceInMilliseconds(dateA, dateB) <= daysInMilliseconds;
 };
 
 /**
@@ -47,12 +45,17 @@ export const isWithinDaysAfter = (
  * @param dateB {Date} - The "current" date
  * @returns {boolean}
  */
-export const isWithinHoursAfter = (dateA: Date, hours: number, dateB: Date): boolean => {
-	//return true if cached date is before the current date
-	const dayA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate());
-	const dayB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate());
-	if (dayA < dayB) return true;
-	const hoursA = dateA.getHours();
-	const hoursB = dateB.getHours();
+export const isWithinHoursAfter = (
+	dateA: Date,
+	hours: number,
+	dateB: Date
+): boolean => {
+	const dayA = startOfDay(dateA);
+	const dayB = startOfDay(dateB);
+
+	if (isBefore(dayA, dayB)) return true;
+
+	const hoursA = getHours(dateA);
+	const hoursB = getHours(dateB);
 	return hoursA < hoursB && hoursB - hoursA >= hours;
 };

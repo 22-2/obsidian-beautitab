@@ -2,7 +2,7 @@
 // Background Cache Operations
 // ============================================================================
 
-import { isSameHour, differenceInMilliseconds } from "date-fns";
+import { isSameHour, differenceInMilliseconds, isValid } from "date-fns";
 import {
 	BackgroundCache,
 	CACHE_MAX_ITEMS,
@@ -23,7 +23,7 @@ const isFresh = (
 	now: Date
 ): boolean => {
 	const date = typeof dateISO === "string" ? new Date(dateISO) : dateISO;
-	if (Number.isNaN(date.getTime())) return false;
+	if (!isValid(date)) return false;
 
 	// Different hour = not fresh
 	if (!isSameHour(date, now)) {

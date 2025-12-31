@@ -1,5 +1,5 @@
 import { normalizePath } from "obsidian";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import log from "loglevel";
 import { fetchPolyfillSafe } from ".//fetchPolyfillSafe";
 import BeautitabPlugin from "main";
@@ -120,12 +120,11 @@ export class LocalImageCache {
 			if (!(await this.adapter.exists(this.cacheDir))) return;
 
 			const { files } = await this.adapter.list(this.cacheDir);
-			const maxAge = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-			const now = Date.now();
+			const now = new Date();
 
 			for (const file of files) {
 				const stat = await this.adapter.stat(file);
-				if (stat && now - stat.mtime > maxAge) {
+				if (stat && differenceInDays(now, new Date(stat.mtime)) > MAX_AGE_DAYS) {
 					await this.adapter.remove(file);
 					logger.debug("Pruned:", file);
 				}

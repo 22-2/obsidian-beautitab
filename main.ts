@@ -15,6 +15,7 @@ import { LocalImageCache } from "src/Utils/LocalImageCache";
 import { clearInterval, setInterval } from "worker-timers";
 import { fetchMultipleFromUnsplash } from "React/Components/App/hooks/background/unsplashApi";
 import { getSeasonalTag } from "React/Components/App/hooks/background/seasonalTheme";
+import { addHours, getHours } from "date-fns";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -179,8 +180,7 @@ export default class BeautitabPlugin extends Plugin {
 		}
 
 		const now = new Date();
-		const nextHour = new Date(now);
-		nextHour.setHours(nextHour.getHours() + 1);
+		const nextHour = addHours(now, 1);
 
 		// Check what we already have cached
 		const currentCached = await this.imageCache.getForHour(backgroundTheme, now);
@@ -197,8 +197,8 @@ export default class BeautitabPlugin extends Plugin {
 		if (needCount === 0) return;
 
 		logger.debug("Prefetching wallpapers", {
-			currentHour: now.getHours(),
-			nextHour: nextHour.getHours(),
+			currentHour: getHours(now),
+			nextHour: getHours(nextHour),
 			needCount,
 		});
 
