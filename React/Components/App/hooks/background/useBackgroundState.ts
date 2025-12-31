@@ -3,7 +3,6 @@ import BeautitabPlugin from "main";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { CachedBackground } from "src/Types/Interfaces";
 import logger from "src/Utils/logger";
-import { CROSSFADE_DURATION } from "./constants";
 import {
 	resolveUrl,
 	preloadImage,
@@ -11,7 +10,7 @@ import {
 	getInitialBackground,
 } from "./utils";
 
-interface UseCrossfadeOptions {
+interface UseBackgroundStateOptions {
 	settings: BeautitabPluginSettings;
 	plugin: BeautitabPlugin;
 	effectiveTime: Date;
@@ -20,40 +19,31 @@ interface UseCrossfadeOptions {
 	refetch: () => void;
 }
 
-interface UseCrossfadeResult {
+interface UseBackgroundStateResult {
 	currentBg: CachedBackground | null;
-	incomingBg: CachedBackground | null;
 	isBackgroundVisible: boolean;
-	isCrossfading: boolean;
 }
 
 /**
- * Hook to manage crossfade animation between backgrounds
+ * Hook to manage current background state
+ * Handles initialization, updates, file existence validation, and persistence
  */
-export const useCrossfade = ({
+export const useBackgroundState = ({
 	settings,
 	plugin,
 	effectiveTime,
 	isCachedUsable,
 	fetchedBg,
 	refetch,
-}: UseCrossfadeOptions): UseCrossfadeResult => {
+}: UseBackgroundStateOptions): UseBackgroundStateResult => {
 	// Initialize with valid background or null
 	const [currentBg, setCurrentBg] = useState<CachedBackground | null>(() =>
 		getInitialBackground(settings, effectiveTime)
 	);
-	const [incomingBg, setIncomingBg] = useState<CachedBackground | null>(null);
 	const [isBackgroundVisible, setIsBackgroundVisible] = useState(false);
-	const [isCrossfading, setIsCrossfading] = useState(false);
 
-	// Refs for stable references
-	const currentBgRef = useRef<CachedBackground | null>(null);
+	// Ref to track if background has been shown
 	const hasShownBackgroundRef = useRef(false);
-
-	// Keep ref in sync
-	useEffect(() => {
-		currentBgRef.current = currentBg;
-	}, [currentBg]);
 
 	// Verify file existence for cached background
 	useEffect(() => {
@@ -72,13 +62,12 @@ export const useCrossfade = ({
 		void verify();
 	}, [plugin, refetch, currentBg?.url]);
 
-	// Handle background updates with crossfade
+	// Handle background updates (no crossfade - immediate switch)
 	useEffect(() => {
 		const bg = isCachedUsable ? settings.cachedBackground : fetchedBg;
 		if (!bg?.url) return;
 
 		let cancelled = false;
-		let timeoutId: number | undefined;
 
 		const updateBackground = async () => {
 			const resolvedUrl = resolveUrl(bg.url, plugin);
@@ -97,43 +86,20 @@ export const useCrossfade = ({
 
 			if (cancelled) return;
 
-			const prev = currentBgRef.current;
-
-			// Initial background - no crossfade needed
-			if (!prev?.url) {
-				setCurrentBg(bg);
-				return;
-			}
-
-			// Same URL - no update needed
-			if (prev.url === bg.url) return;
-
-			// Initiate crossfade
-			setIncomingBg(bg);
-			requestAnimationFrame(() => {
-				if (!cancelled) setIsCrossfading(true);
-			});
-
-			// Complete crossfade after duration
-			timeoutId = window.setTimeout(() => {
-				if (cancelled) return;
-				setCurrentBg(bg);
-				setIncomingBg(null);
-				setIsCrossfading(false);
-			}, CROSSFADE_DURATION);
+			// Set the new background immediately
+			setCurrentBg(bg);
 		};
 
 		void updateBackground();
 
 		return () => {
 			cancelled = true;
-			if (timeoutId) window.clearTimeout(timeoutId);
 		};
 	}, [isCachedUsable, settings.cachedBackground, fetchedBg, plugin, refetch]);
 
-	// Handle visibility animation
+	// Handle visibility animation (fade in on first load)
 	useEffect(() => {
-		if (!currentBg?.url && !incomingBg?.url) return;
+		if (!currentBg?.url) return;
 
 		if (!hasShownBackgroundRef.current) {
 			hasShownBackgroundRef.current = true;
@@ -142,7 +108,7 @@ export const useCrossfade = ({
 		}
 
 		setIsBackgroundVisible(true);
-	}, [currentBg?.url, incomingBg?.url]);
+	}, [currentBg?.url]);
 
 	// Persist current background to settings
 	useEffect(() => {
@@ -160,18 +126,15 @@ export const useCrossfade = ({
 
 	return {
 		currentBg,
-		incomingBg,
 		isBackgroundVisible,
-		isCrossfading,
 	};
 };
 
 /**
- * Generate CSS custom properties for background URLs
+ * Generate CSS custom properties for background URL
  */
 export const useBackgroundStyle = (
 	currentBg: CachedBackground | null,
-	incomingBg: CachedBackground | null,
 	plugin: BeautitabPlugin
 ): Record<string, string> & React.CSSProperties => {
 	return useMemo(() => {
@@ -184,13 +147,6 @@ export const useBackgroundStyle = (
 			)}")`;
 		}
 
-		if (incomingBg?.url) {
-			style["--beautitab-bg-url-next"] = `url("${resolveUrl(
-				incomingBg.url,
-				plugin
-			)}")`;
-		}
-
 		return style;
-	}, [currentBg?.url, incomingBg?.url, plugin]);
+	}, [currentBg?.url, plugin]);
 };

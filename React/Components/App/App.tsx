@@ -36,11 +36,7 @@ const App: React.FC<AppProps> = ({ plugin }) => {
 	const settings = useSettings();
 	const time = useTime(settings.timeFormat);
 	const quote = useQuote(settings.quoteSource, settings.customQuotes);
-	const {
-		isBackgroundVisible,
-		isCrossfading,
-		backgroundStyle,
-	} = useBackground(settings, plugin);
+	const { isBackgroundVisible, backgroundStyle } = useBackground(settings, plugin);
 	const recentFiles = useRecentFiles(obsidian, 5);
 
 	// Bookmarks
@@ -77,7 +73,6 @@ const App: React.FC<AppProps> = ({ plugin }) => {
 		settings.backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS &&
 			"beautitab-root--transparentWithShadows",
 		isBackgroundVisible && "beautitab-root--bg-visible",
-		isCrossfading && "beautitab-root--bg-crossfade",
 	]
 		.filter(Boolean)
 		.join(" ");

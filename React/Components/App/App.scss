@@ -46,15 +46,13 @@
 		position: relative;
 		overflow: hidden;
 
-		&::before,
-		&::after {
+		&::before {
 			content: "";
 			position: absolute;
 			inset: 0;
 			background-size: cover;
 			background-position: center;
-			background-size: cover;
-			background-position: center;
+			background-image: var(--beautitab-bg-url-current);
 			filter: blur(4px);
 			transform: scale(1.06);
 			z-index: 0;
@@ -63,23 +61,9 @@
 			will-change: opacity;
 		}
 
-		&::before {
-			background-image: var(--beautitab-bg-url-current);
-		}
-
-		&::after {
-			background-image: var(--beautitab-bg-url-next);
-		}
-
 		&.beautitab-root--bg-visible::before {
 			opacity: 1;
 		}
-
-		&.beautitab-root--bg-crossfade::after {
-			opacity: 1;
-		}
-
-
 
 		&.beautitab-root--transparent {
 			background: transparent;

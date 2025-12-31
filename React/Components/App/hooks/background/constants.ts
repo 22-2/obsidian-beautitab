@@ -2,9 +2,6 @@
  * Background hook constants
  */
 
-/** Duration of crossfade animation in milliseconds */
-export const CROSSFADE_DURATION = 500;
-
 /** How long before data is considered stale (1 hour) */
 export const STALE_TIME = 1000 * 60 * 60;
 

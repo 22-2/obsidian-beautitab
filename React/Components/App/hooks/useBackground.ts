@@ -6,7 +6,7 @@ import { UseBackgroundResult } from "./background/types";
 import { useEffectiveTime } from "./background/useEffectiveTime";
 import { useCacheValidation } from "./background/useCacheValidation";
 import { useBackgroundFetch } from "./background/useBackgroundFetch";
-import { useCrossfade, useBackgroundStyle } from "./background/useCrossfade";
+import { useBackgroundState, useBackgroundStyle } from "./background/useBackgroundState";
 import { usePrefetch } from "./background/usePrefetch";
 
 /**
@@ -16,7 +16,7 @@ import { usePrefetch } from "./background/usePrefetch";
  * - Time tracking for hour-based background changes
  * - Cache validation to determine if fetch is needed
  * - Background fetching from Unsplash or other sources
- * - Crossfade animation between backgrounds
+ * - Background state management
  * - Prefetching next hour's background
  */
 export const useBackground = (
@@ -55,16 +55,15 @@ export const useBackground = (
 		});
 	}, [isCachedUsable, isLoading, isSuccess, isError, error, fetchedBg]);
 
-	// Manage crossfade animation
-	const { currentBg, incomingBg, isBackgroundVisible, isCrossfading } =
-		useCrossfade({
-			settings,
-			plugin,
-			effectiveTime,
-			isCachedUsable,
-			fetchedBg,
-			refetch,
-		});
+	// Manage background state
+	const { currentBg, isBackgroundVisible } = useBackgroundState({
+		settings,
+		plugin,
+		effectiveTime,
+		isCachedUsable,
+		fetchedBg,
+		refetch,
+	});
 
 	// Prefetch next hour's background
 	usePrefetch({
@@ -74,13 +73,11 @@ export const useBackground = (
 	});
 
 	// Generate CSS custom properties
-	const backgroundStyle = useBackgroundStyle(currentBg, incomingBg, plugin);
+	const backgroundStyle = useBackgroundStyle(currentBg, plugin);
 
 	return {
 		currentBg,
-		incomingBg,
 		isBackgroundVisible,
-		isCrossfading,
 		backgroundStyle,
 	};
 };
