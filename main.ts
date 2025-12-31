@@ -115,6 +115,7 @@ export default class BeautitabPlugin extends Plugin {
 	queryClient: QueryClient;
 	imageCache!: LocalImageCache;
 	private backgroundCheckTimer: number | null = null;
+	private prefetchPromise: Promise<void> | null = null;
 
 	async onload() {
 		logger.info("Beautitab: Plugin Loading... VERSION CHECK " + Date.now());
@@ -161,82 +162,90 @@ export default class BeautitabPlugin extends Plugin {
 	 * Prefetch wallpapers for current hour and next hour
 	 */
 	async prefetchWallpapers() {
-		const { backgroundTheme, apiKey } = this.settings;
-
-		// Skip for themes that don't need prefetching
-		if (
-			backgroundTheme === BackgroundTheme.CUSTOM ||
-			backgroundTheme === BackgroundTheme.LOCAL ||
-			backgroundTheme === BackgroundTheme.TRANSPARENT ||
-			backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
-		) {
-			return;
+		if (this.prefetchPromise) {
+			return this.prefetchPromise;
 		}
 
-		// Skip if no API key
-		if (!apiKey) {
-			logger.debug("Skipping prefetch: no API key");
-			return;
-		}
+		this.prefetchPromise = (async () => {
+			const { backgroundTheme, apiKey } = this.settings;
 
-		const now = new Date();
-		const nextHour = addHours(now, 1);
-
-		// Check what we already have cached
-		const currentCached = await this.imageCache.getForHour(backgroundTheme, now);
-		const nextCached = await this.imageCache.getForHour(backgroundTheme, nextHour);
-
-		// Both cached, nothing to do
-		if (currentCached && nextCached) {
-			logger.debug("Both hours already cached");
-			return;
-		}
-
-		// Determine how many to fetch
-		const needCount = (currentCached ? 0 : 1) + (nextCached ? 0 : 1);
-		if (needCount === 0) return;
-
-		logger.debug("Prefetching wallpapers", {
-			currentHour: getHours(now),
-			nextHour: getHours(nextHour),
-			needCount,
-		});
-
-		try {
-			// Fetch required number of unique images in one request
-			const query = backgroundTheme === BackgroundTheme.SEASONS_AND_HOLIDAYS
-				? getSeasonalTag(now)
-				: backgroundTheme;
-
-			const images = await fetchMultipleFromUnsplash(
-				apiKey,
-				query,
-				backgroundTheme,
-				needCount
-			);
-
-			if (images.length === 0) {
-				logger.debug("No images from Unsplash");
+			// Skip for themes that don't need prefetching
+			if (
+				backgroundTheme === BackgroundTheme.CUSTOM ||
+				backgroundTheme === BackgroundTheme.LOCAL ||
+				backgroundTheme === BackgroundTheme.TRANSPARENT ||
+				backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
+			) {
 				return;
 			}
 
-			let imageIndex = 0;
-
-			// Cache for current hour if needed
-			if (!currentCached && images[imageIndex]) {
-				await this.imageCache.cache(images[imageIndex].url, backgroundTheme, now);
-				imageIndex++;
+			// Skip if no API key
+			if (!apiKey) {
+				logger.debug("Skipping prefetch: no API key");
+				return;
 			}
 
-			// Cache for next hour if needed (guaranteed different image)
-			if (!nextCached && images[imageIndex]) {
-				await this.imageCache.cache(images[imageIndex].url, backgroundTheme, nextHour);
-			}
+			try {
+				const now = new Date();
+				const targetHours = [now, addHours(now, 1)];
 
-			logger.debug("Wallpaper prefetch complete");
-		} catch (e) {
-			logger.error("Prefetch error:", e);
-		}
+				// Check what we already have cached
+				const cacheChecks = await Promise.all(
+					targetHours.map((hour) =>
+						this.imageCache.getForHour(backgroundTheme, hour)
+					)
+				);
+
+				const missingIndices = cacheChecks
+					.map((v, i) => (v === null ? i : -1))
+					.filter((i) => i !== -1);
+				const needCount = missingIndices.length;
+
+				if (needCount === 0) {
+					logger.debug("All target hours already cached");
+					return;
+				}
+
+				logger.debug("Prefetching wallpapers", {
+					currentHour: getHours(now),
+					needCount,
+					missingHours: missingIndices.map((i) => getHours(targetHours[i])),
+				});
+
+				// Fetch required number of unique images in one request
+				const query =
+					backgroundTheme === BackgroundTheme.SEASONS_AND_HOLIDAYS
+						? getSeasonalTag(now)
+						: backgroundTheme;
+
+				const images = await fetchMultipleFromUnsplash(
+					apiKey,
+					query,
+					backgroundTheme,
+					needCount
+				);
+
+				if (images.length === 0) {
+					logger.debug("No images from Unsplash");
+					return;
+				}
+
+				// Cache missing hours
+				for (let i = 0; i < images.length; i++) {
+					const hourIndex = missingIndices[i];
+					const hour = targetHours[hourIndex];
+					await this.imageCache.cache(images[i].url, backgroundTheme, hour);
+				}
+
+				logger.debug("Wallpaper prefetch complete");
+			} catch (e) {
+				logger.error("Prefetch error:", e);
+			} finally {
+				this.prefetchPromise = null;
+			}
+		})();
+
+		return this.prefetchPromise;
 	}
 
 	private stopBackgroundCheck() {

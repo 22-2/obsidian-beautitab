@@ -118,6 +118,10 @@ export const useBackground = (
 		// Cache-based themes - get from LocalImageCache
 		if (THEMES_NEEDING_CACHE.includes(backgroundTheme)) {
 			try {
+				// Always trigger prefetch for current and next hour to ensure cache is hot.
+				// Since we added a guard in main.ts, this is safe to call frequently.
+				void plugin.prefetchWallpapers();
+
 				const cachedPath = await plugin.imageCache.getForHour(
 					backgroundTheme,
 					mountTimeRef.current
