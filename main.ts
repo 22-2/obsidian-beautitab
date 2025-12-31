@@ -5,7 +5,6 @@ import { setSettings } from "src/Utils/settingsStore";
 import { normalizeBackgroundCache, hasFreshBackground } from "src/Utils/backgroundCache";
 import { fetchNewBackground } from "src/Utils/backgroundFetcher";
 import { BackgroundTheme } from "src/Types/Enums";
-import { buildBackgroundQueryKey } from "src/Utils/backgroundQuery";
 // @ts-expect-error
 import BackgroundWorker from "src/Utils/background.worker";
 import { QueryClient } from "@tanstack/react-query";
@@ -134,15 +133,12 @@ class BackgroundPrefetchManager {
 			this.lastFetchAttempt = Date.now();
 			logger.info("Beautitab: Prefetching background for next hour...");
 
-			await this.plugin.queryClient.prefetchQuery({
-				queryKey: buildBackgroundQueryKey(this.settings, nextHour),
-				queryFn: () =>
-					fetchNewBackground({
-						settings: this.settings,
-						plugin: this.plugin,
-						now: nextHour,
-					}),
-				staleTime: 1000 * 60 * 5,
+			// Directly call fetchNewBackground, which internally uses queryClient.fetchQuery
+			// This avoids a deadlock where prefetchQuery waits for fetchNewBackground which waits for the same query key
+			await fetchNewBackground({
+				settings: this.settings,
+				plugin: this.plugin,
+				now: nextHour,
 			});
 		} catch (error) {
 			logger.error("Beautitab: Failed to prefetch background", error);

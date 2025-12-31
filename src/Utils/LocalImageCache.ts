@@ -108,20 +108,25 @@ export class LocalImageCache {
     private async downloadAndSave(url: string, filePath: string): Promise<string | null> {
         try {
             logger.info("Beautitab: Downloading image", url);
+            console.log("DEBUG: downloadAndSave. requesting url", url);
+            // This requestUrl is from Obsidian
             const response = await requestUrl({ url });
+            console.log("DEBUG: downloadAndSave. requestUrl done. Status:", response.status);
             logger.debug("Beautitab: Download response status", response.status);
 
             if (response.status !== 200) {
-                logger.error("Beautitab: Download failed with status", response.status);
+                    logger.error("Beautitab: Download failed with status", response.status);
                 return null;
             }
 
-            logger.debug("Beautitab: Writing to file", filePath);
+            console.log("DEBUG: downloadAndSave. writing binary");
             await this.plugin.app.vault.adapter.writeBinary(filePath, response.arrayBuffer);
+            console.log("DEBUG: downloadAndSave. writeBinary done");
             logger.info("Beautitab: Successfully saved to cache", filePath);
 
             return filePath;
         } catch (e) {
+            console.log("DEBUG: LocalImageCache error in downloadAndSave", e);
             logger.error("Beautitab: Error in downloadAndSave", e);
             return null;
         }

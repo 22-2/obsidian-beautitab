@@ -57,11 +57,7 @@ const fetchBackgroundCore = async (
 
 		logger.debug("Beautitab: getBackground result", { background: result.background });
 
-		if (result.backgroundCache) {
-			plugin.settings.backgroundCache = result.backgroundCache;
-			await plugin.saveSettings();
-			setSettings(plugin.settings);
-		}
+        let cacheToSave = result.backgroundCache || plugin.settings.backgroundCache;
 
 		if (result.background && shouldCacheLocally(result.background)) {
 			logger.info("Beautitab: Attempting to cache locally", result.background.url);
@@ -71,13 +67,42 @@ const fetchBackgroundCore = async (
 				date: result.background.date,
 			});
 			logger.debug("Beautitab: cache.saveImage result", localPath);
-			if (localPath) {
-				result.background.url = localPath;
+			
+			if (localPath && result.background) {
+                // Convert to resource path for display (app://...)
+                const resourcePath = await cache.getResourcePath(localPath);
+                
+                const bg = result.background;
+				bg.url = resourcePath;
 				maybePruneCache(cache);
+
+                // Update the cache object with the local path
+                if (cacheToSave) {
+                    for (const key in cacheToSave) {
+                        const entry = cacheToSave[key];
+                        if (entry && entry.items) {
+                            entry.items.forEach(item => {
+                                // Match by date and theme to ensure we update the correct item
+                                const itemDate = new Date(item.date);
+                                if (itemDate.getTime() === bg.date.getTime() && 
+                                    item.theme === bg.theme) {
+                                    item.url = resourcePath;
+                                }
+                            });
+                        }
+                    }
+                }
 			}
 		} else {
 			logger.debug("Beautitab: Skipping local cache", { bgInfo: result.background,
 				reason: !result.background ? "no background" : "shouldCacheLocally=false" });
+		}
+
+        // Save settings after potential local cache update
+		if (cacheToSave) {
+			plugin.settings.backgroundCache = cacheToSave;
+			await plugin.saveSettings();
+			setSettings(plugin.settings);
 		}
 
 		logger.debug("Beautitab: fetchBackgroundCore complete", result.background);

@@ -32,10 +32,35 @@ test("prefetch should update settings cache with local path", async ({ obsidian,
 
   // Set time to X:00
   const now = new Date("2025-12-28T14:00:00Z");
-  await page.clock.setFixedTime(now);
+  await page.clock.install({ time: now });
 
   console.log("Waiting for Obsidian ready...");
   await obsidian.waitReady();
+
+  // Mock Unsplash API to prevent network hangs with mocked clock
+  // and to ensure deterministic testing without using up API quota
+  await page.route("**/photos/random**", async route => {
+      console.log("Intercepted Unsplash API request, returning mock");
+      await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{
+              id: "mock-id",
+              urls: {
+                  raw: "https://images.unsplash.com/photo-1682687220742-aba13b6e50ba", // A valid Unsplash image
+                  full: "https://images.unsplash.com/photo-1682687220742-aba13b6e50ba"
+              },
+              links: {
+                  download_location: "https://api.unsplash.com/photos/mock-id/download"
+              },
+              user: {
+                  name: "Mock User",
+                  links: { html: "https://unsplash.com/@mockuser" }
+              }
+          }])
+      });
+  });
+
   await obsidian.command("workspace:new-tab");
   await obsidian.waitForView("beautitab-react-view");
   await obsidian.save("beautitab-virtual.md", "");
@@ -56,12 +81,40 @@ test("prefetch should update settings cache with local path", async ({ obsidian,
   await obsidian.command("workspace:new-tab");
   await obsidian.waitForView("beautitab-react-view");
 
-  console.log("Waiting for prefetch...");
-  // Prefetch runs after component invalidation or mounting, usually checks if next hour is needed
-  // We need to wait enough time for the prefetch request to finish AND image to be downloaded
-  await obsidian.page.waitForTimeout(15000);
+  // Ensure we trigger a fetch if one isn't happening, or wait for the existing one
+  await obsidian.page.evaluate(async () => {
+     const plugin = app.plugins.getPlugin("beautitab") as any;
+     if (!plugin.prefetchManager) return;
+     
+     // If not fetching, trigger it. If fetching, we'll just wait.
+     if (!plugin.prefetchManager.isFetching) {
+         console.log("Triggering checkAndPrefetch manually");
+         // Do not await this, so we can control time in the loop below
+         plugin.prefetchManager.checkAndPrefetch(); 
+     } else {
+         console.log("Already fetching, will wait for completion");
+     }
+  });
 
-  // Check the settings to see if the cache entry for NEXT hour has a local path
+  // Poll until isFetching is false
+  // We need to advance the clock to let the fetch timeouts/intervals fire
+  console.log("Waiting for fetch to complete...");
+  for (let i = 0; i < 30; i++) { // Try for 30 iterations
+      const stillFetching = await obsidian.page.evaluate(() => {
+          const plugin = app.plugins.getPlugin("beautitab") as any;
+          return plugin.prefetchManager && plugin.prefetchManager.isFetching;
+      });
+      
+      if (!stillFetching) {
+          console.log("Fetch completed!");
+          break;
+      }
+      
+      // Advance virtual time to process timers
+      await page.clock.fastForward(1000); 
+      // Real wait to let JS event loop flush
+      await obsidian.page.waitForTimeout(200); 
+  }
   const cacheCheck = await obsidian.page.evaluate(() => {
     const plugin = app.plugins.getPlugin("beautitab") as any;
     const cache = plugin.settings.backgroundCache || {};
