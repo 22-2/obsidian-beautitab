@@ -31,7 +31,6 @@ export enum QUOTE_SOURCE {
 }
 
 export enum NEW_TAB_BEHAVIOR {
-	HIJACK = "Hijack empty tabs",
 	OVERRIDE = "Override New Tab command",
 	NONE = "None",
 }

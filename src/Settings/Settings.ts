@@ -108,7 +108,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("New tab behavior")
 			.setDesc(
-				`How should Beautitab handle new tabs? "Hijack empty tabs" will replace any empty tab with Beautitab. "Override New Tab command" will override the default Obsidian "New tab" command. "None" will do nothing.`
+				`How should Beautitab handle new tabs? "Override New Tab command" will override the default Obsidian "New tab" command. "None" will do nothing.`
 			)
 			.addDropdown((component) => {
 				Object.values(NEW_TAB_BEHAVIOR).forEach((behavior) => {

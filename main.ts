@@ -191,16 +191,7 @@ class NewTabPatcher {
 		}
 	}
 
-	handleLayoutChange() {
-		if (this.settings.newTabBehavior !== NEW_TAB_BEHAVIOR.HIJACK) {
-			return;
-		}
 
-		const leaf = this.app.workspace.getMostRecentLeaf();
-		if (leaf?.getViewState().type === "empty") {
-			leaf.setViewState({ type: BEAUTITAB_REACT_VIEW });
-		}
-	}
 }
 
 /**
@@ -320,11 +311,7 @@ export default class BeautitabPlugin extends Plugin {
 	}
 
 	private setupEventListeners() {
-		this.registerEvent(
-			this.app.workspace.on("layout-change", () => {
-				this.tabPatcher?.handleLayoutChange();
-			})
-		);
+
 	}
 
 	private setupNewTabBehavior() {
