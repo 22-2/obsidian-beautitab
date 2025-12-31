@@ -131,6 +131,13 @@ export default class BeautitabPlugin extends Plugin {
 		});
 	}
 
+	onunload(): void {
+		if (this.backgroundCheckTimer) {
+			clearInterval(this.backgroundCheckTimer);
+		}
+		this.imageCache?.prune();
+	}
+
 	/**
 	 * Start periodic wallpaper prefetch (every 10 minutes)
 	 * Fetches wallpapers for current hour and next hour
