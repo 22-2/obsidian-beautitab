@@ -111,7 +111,7 @@ class DevModeManager {
  * メインプラグインクラス
  */
 export default class BeautitabPlugin extends Plugin {
-	settings: BeautitabPluginSettings;
+	settings: BeautitabPluginSettings = DEFAULT_SETTINGS;
 	queryClient: QueryClient;
 	imageCache!: LocalImageCache;
 	private backgroundCheckTimer: number | null = null;
@@ -119,16 +119,24 @@ export default class BeautitabPlugin extends Plugin {
 
 	async onload() {
 		logger.info("Beautitab: Plugin Loading... VERSION CHECK " + Date.now());
+
+		// 1. Initialize core non-async components immediately
+		this.queryClient = new QueryClient();
+		this.imageCache = new LocalImageCache(this);
+		this.setupView();
+
+		// 2. Load settings (async)
+		await this.initializeSettings();
+		this.applyLogLevel();
+
+		// 3. Setup other components
+		this.addSettingTab(new BeautitabPluginSettingTab(this.app, this));
+		DevModeManager.initialize();
+		this.patchNewTab();
+
+		// 4. Background tasks
 		this.app.workspace.onLayoutReady(async () => {
-			this.setupView();
-			this.imageCache = new LocalImageCache(this);
-			this.queryClient = new QueryClient();
-			await this.initializeSettings();
-			this.applyLogLevel();
-			DevModeManager.initialize();
-			this.addSettingTab(new BeautitabPluginSettingTab(this.app, this));
 			DevModeManager.configureMobileEmulation(this.app);
-			this.patchNewTab();
 			this.startBackgroundCheck();
 		});
 	}
@@ -164,6 +172,10 @@ export default class BeautitabPlugin extends Plugin {
 	async prefetchWallpapers() {
 		if (this.prefetchPromise) {
 			return this.prefetchPromise;
+		}
+
+		if (!this.settings) {
+			return;
 		}
 
 		this.prefetchPromise = (async () => {
