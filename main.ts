@@ -132,9 +132,7 @@ export default class BeautitabPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		if (this.backgroundCheckTimer) {
-			clearInterval(this.backgroundCheckTimer);
-		}
+		this.stopBackgroundCheck();
 		this.imageCache?.prune();
 	}
 
@@ -143,6 +141,9 @@ export default class BeautitabPlugin extends Plugin {
 	 * Fetches wallpapers for current hour and next hour
 	 */
 	private startBackgroundCheck() {
+		// Stop existing if any
+		this.stopBackgroundCheck();
+
 		// Initial prune (only at startup)
 		this.imageCache.prune();
 
