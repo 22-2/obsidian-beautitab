@@ -25,6 +25,7 @@
 		"@typescript-eslint/parser": "8.48.0",
 		"@vitest/ui": "^4.0.16",
 		"builtin-modules": "5.0.0",
+		"dotenv": "^17.2.3",
 		"esbuild": "^0.27.0",
 		"esbuild-plugin-inline-worker": "^0.1.1",
 		"i18next": "^25.6.3",

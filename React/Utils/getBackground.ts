@@ -264,7 +264,13 @@ const getBackground = async (
 				theme: backgroundTheme,
 			}));
 
-			const updatedCache = appendFetchedBackgrounds(cache, key, items, {
+			// Only use the first item to ensure one background per hour
+			const firstItem = items[0];
+			if (!firstItem) {
+				return { background: null, backgroundCache: cache };
+			}
+
+			const updatedCache = appendFetchedBackgrounds(cache, key, [firstItem], {
 				now,
 				maxItems: CACHE_MAX_ITEMS,
 				ttlMinutes: CACHE_TTL_MINUTES,
@@ -275,7 +281,7 @@ const getBackground = async (
 				ttlMinutes: CACHE_TTL_MINUTES,
 			});
 			return {
-				background: buildCachedBackground(next?.background ?? items[0]),
+				background: buildCachedBackground(next?.background ?? firstItem),
 				backgroundCache: next?.cache ?? updatedCache,
 			};
 		}
@@ -368,7 +374,13 @@ const getBackground = async (
 				theme: backgroundTheme,
 			}));
 
-			const updatedCache = appendFetchedBackgrounds(cache, key, items, {
+			// Only use the first item to ensure one background per hour
+			const firstItem = items[0];
+			if (!firstItem) {
+				return { background: null, backgroundCache: cache };
+			}
+
+			const updatedCache = appendFetchedBackgrounds(cache, key, [firstItem], {
 				now,
 				maxItems: CACHE_MAX_ITEMS,
 				ttlMinutes: CACHE_TTL_MINUTES,
@@ -379,7 +391,7 @@ const getBackground = async (
 				ttlMinutes: CACHE_TTL_MINUTES,
 			});
 			return {
-				background: buildCachedBackground(next?.background ?? items[0]),
+				background: buildCachedBackground(next?.background ?? firstItem),
 				backgroundCache: next?.cache ?? updatedCache,
 			};
 		}

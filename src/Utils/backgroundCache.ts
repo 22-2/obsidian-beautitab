@@ -1,7 +1,7 @@
 import { BackgroundCache, BackgroundCacheEntry, CachedBackgroundItem } from "src/Types/Interfaces";
 
 export const CACHE_TTL_MINUTES = 60;
-export const CACHE_BATCH_SIZE = 5;
+export const CACHE_BATCH_SIZE = 1; // Only fetch one image per hour
 export const CACHE_MAX_ITEMS = 15;
 
 const clampIndex = (length: number, lastUsedIndex?: number): number => {
