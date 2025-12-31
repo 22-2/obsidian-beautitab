@@ -1,224 +1,189 @@
-import fs from "fs";
-import { requestUrl, normalizePath } from "obsidian";
+import { normalizePath } from "obsidian";
+import { format } from "date-fns";
+import log from "loglevel";
+import { fetchPolyfillSafe } from ".//fetchPolyfillSafe";
 import BeautitabPlugin from "main";
-import fnv1a from "fnv1a";
-import logger from "./logger";
 
-const CACHE_FOLDER_NAME = "bg-cache";
-const MAX_CACHE_AGE_DAYS = 3;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const logger = log.getLogger("Beautytab:LocalImageCache");
 
-interface ImageMeta {
-    theme?: string;
-    date?: Date;
-}
+const CACHE_FOLDER = "bg-cache";
+const MAX_AGE_DAYS = 3;
 
+/**
+ * Simple local image cache for background images.
+ * Downloads remote images and stores them in the plugin folder.
+ */
 export class LocalImageCache {
-    plugin: BeautitabPlugin;
-    cacheDir: string;
+	private plugin: BeautitabPlugin;
+	private cacheDir: string;
 
-    constructor(plugin: BeautitabPlugin) {
-        this.plugin = plugin;
-        this.cacheDir = normalizePath(`${this.plugin.manifest.dir}/${CACHE_FOLDER_NAME}`);
-    }
+	constructor(plugin: BeautitabPlugin) {
+		this.plugin = plugin;
+		this.cacheDir = normalizePath(`${plugin.manifest.dir}/${CACHE_FOLDER}`);
+	}
 
-    async init(): Promise<void> {
-        const adapter = this.plugin.app.vault.adapter;
-        if (!(await adapter.exists(this.cacheDir))) {
-            await adapter.mkdir(this.cacheDir);
-        }
-    }
+	private get adapter() {
+		return this.plugin.app.vault.adapter;
+	}
 
-    async saveImage(url: string, meta?: ImageMeta): Promise<string | null> {
-        try {
-            logger.debug("Beautitab: LocalImageCache.saveImage called", { url, meta });
-            await this.init();
+	/**
+	 * Ensures the cache directory exists
+	 */
+	async ensureDir(): Promise<void> {
+		if (!(await this.adapter.exists(this.cacheDir))) {
+			await this.adapter.mkdir(this.cacheDir);
+		}
+	}
 
-            if (await this.isLocalPath(url)) {
-                logger.debug("Beautitab: URL is already local path, returning as-is", url);
-                return url;
-            }
+	/**
+	 * Get cached wallpaper for a specific theme and hour.
+	 * Returns the file path if found, null otherwise.
+	 */
+	async getForHour(theme: string, date: Date = new Date()): Promise<string | null> {
+		try {
+			await this.ensureDir();
+			const prefix = this.generatePrefix(theme, date);
+			const { files } = await this.adapter.list(this.cacheDir);
+			
+			// Find file matching this theme+hour
+			const match = files.find((f) => {
+				const filename = f.split("/").pop() || "";
+				return filename.startsWith(prefix);
+			});
 
-            const filename = this.buildDeterministicFilename(url, meta);
-            const filePath = normalizePath(`${this.cacheDir}/${filename}`);
-            logger.debug("Beautitab: Cache file path", { filename, filePath });
+			if (match) {
+				logger.debug("Found cached wallpaper:", match);
+				return match;
+			}
+			return null;
+		} catch (e) {
+			logger.error("getForHour error:", e);
+			return null;
+		}
+	}
 
-            if (await this.exists(filePath)) {
-                logger.debug("Beautitab: Cache file already exists", filePath);
-                return filePath;
-            }
+	/**
+	 * Downloads and caches an image, returning the local path.
+	 * If already cached or local, returns the existing path.
+	 */
+	async cache(url: string, theme: string, date: Date = new Date()): Promise<string | null> {
+		if (!url) return null;
 
-            logger.debug("Beautitab: Downloading and saving to cache", { url, filePath });
-            return await this.downloadAndSave(url, filePath);
-        } catch (e) {
-            logger.error("Beautitab: Failed to save image to cache", e);
-            return null;
-        }
-    }
+		// Already local
+		if (!url.startsWith("http")) {
+			return url;
+		}
 
-    async getResourcePath(filePath: string): Promise<string> {
-        return this.plugin.app.vault.adapter.getResourcePath(filePath);
-    }
+		try {
+			await this.ensureDir();
 
-    async exists(filePath: string): Promise<boolean> {
-        if (!filePath) return false;
+			const filename = this.generateFilename(url, theme, date);
+			const filePath = normalizePath(`${this.cacheDir}/${filename}`);
 
-        if (filePath.startsWith("app://")) {
-            return this.checkAppProtocolPath(filePath);
-        }
+			// Already cached
+			if (await this.adapter.exists(filePath)) {
+				logger.debug("Cache hit:", filePath);
+				return filePath;
+			}
 
-        return await this.plugin.app.vault.adapter.exists(normalizePath(filePath));
-    }
+			// Download using rate-limited fetch
+			logger.debug("Downloading:", url);
+			const response = await fetchPolyfillSafe(url);
 
-    async pruneCache(): Promise<void> {
-        try {
-            const adapter = this.plugin.app.vault.adapter;
-            if (!(await adapter.exists(this.cacheDir))) return;
+			if (!response.ok) {
+				logger.error("Download failed:", response.status);
+				return null;
+			}
 
-            const files = await this.getCacheFiles();
-            const maxAge = MAX_CACHE_AGE_DAYS * ONE_DAY_MS;
-            const now = Date.now();
+			const buffer = await response.arrayBuffer();
+			await this.adapter.writeBinary(filePath, buffer);
+			logger.debug("Cached:", filePath);
+			return filePath;
+		} catch (e) {
+			logger.error("Cache error:", e);
+			return null;
+		}
+	}
 
-            await this.removeOldFiles(files, now, maxAge);
-        } catch (e) {
-            logger.error("Beautitab: Error pruning cache", e);
-        }
-    }
+	/**
+	 * Gets the resource path for display in browser
+	 */
+	getResourcePath(filePath: string): string {
+		return this.adapter.getResourcePath(filePath);
+	}
 
-    async clearAll(): Promise<void> {
-        try {
-            const adapter = this.plugin.app.vault.adapter;
-            if (!(await adapter.exists(this.cacheDir))) return;
+	/**
+	 * Removes files older than MAX_AGE_DAYS
+	 */
+	async prune(): Promise<void> {
+		try {
+			if (!(await this.adapter.exists(this.cacheDir))) return;
 
-            const files = await this.getCacheFiles();
-            await Promise.all(files.map(file => adapter.remove(file)));
-        } catch (e) {
-            logger.error("Beautitab: Error clearing cache", e);
-        }
-    }
+			const { files } = await this.adapter.list(this.cacheDir);
+			const maxAge = MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+			const now = Date.now();
 
-    // Private helper methods
+			for (const file of files) {
+				const stat = await this.adapter.stat(file);
+				if (stat && now - stat.mtime > maxAge) {
+					await this.adapter.remove(file);
+					logger.debug("Pruned:", file);
+				}
+			}
+		} catch (e) {
+			logger.error("Prune error:", e);
+		}
+	}
 
-    private async isLocalPath(url: string): Promise<boolean> {
-        if (url.startsWith("http") || url.startsWith("https://")) return false;
-        const adapter = this.plugin.app.vault.adapter;
-        return url.startsWith("app://") || await adapter.exists(url);
-    }
+	/**
+	 * Clears all cached files
+	 */
+	async clear(): Promise<void> {
+		try {
+			if (!(await this.adapter.exists(this.cacheDir))) return;
 
-    private async downloadAndSave(url: string, filePath: string): Promise<string | null> {
-        try {
-            logger.info("Beautitab: Downloading image", url);
-            console.log("DEBUG: downloadAndSave. requesting url", url);
-            // This requestUrl is from Obsidian
-            const response = await requestUrl({ url });
-            console.log("DEBUG: downloadAndSave. requestUrl done. Status:", response.status);
-            logger.debug("Beautitab: Download response status", response.status);
+			const { files } = await this.adapter.list(this.cacheDir);
+			await Promise.all(files.map((f) => this.adapter.remove(f)));
+			logger.debug("Cache cleared");
+		} catch (e) {
+			logger.error("Clear error:", e);
+		}
+	}
 
-            if (response.status !== 200) {
-                    logger.error("Beautitab: Download failed with status", response.status);
-                return null;
-            }
+	/**
+	 * Generates prefix for searching cached files (theme + hour)
+	 */
+	private generatePrefix(theme: string, date: Date): string {
+		const hourStamp = format(date, "yyyy-MM-dd_HH");
+		const themeSlug = this.slugify(theme);
+		return `${themeSlug}-${hourStamp}-`;
+	}
 
-            console.log("DEBUG: downloadAndSave. writing binary");
-            await this.plugin.app.vault.adapter.writeBinary(filePath, response.arrayBuffer);
-            console.log("DEBUG: downloadAndSave. writeBinary done");
-            logger.info("Beautitab: Successfully saved to cache", filePath);
+	/**
+	 * Generates a deterministic filename based on URL, theme and hour
+	 */
+	private generateFilename(url: string, theme: string, date: Date): string {
+		const hourStamp = format(date, "yyyy-MM-dd_HH");
+		const themeSlug = this.slugify(theme);
+		const urlHash = this.simpleHash(url);
+		return `${themeSlug}-${hourStamp}-${urlHash}.jpg`;
+	}
 
-            return filePath;
-        } catch (e) {
-            console.log("DEBUG: LocalImageCache error in downloadAndSave", e);
-            logger.error("Beautitab: Error in downloadAndSave", e);
-            return null;
-        }
-    }
+	private slugify(str: string): string {
+		return str
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "")
+			.slice(0, 20);
+	}
 
-    private checkAppProtocolPath(filePath: string): boolean {
-        try {
-            const absolutePath = this.extractAbsolutePath(filePath);
-            return absolutePath ? fs.existsSync(absolutePath) : false;
-        } catch {
-            return false;
-        }
-    }
-
-    private extractAbsolutePath(appUrl: string): string | null {
-        const withoutScheme = appUrl.slice("app://".length);
-        const firstSlash = withoutScheme.indexOf("/");
-
-        if (firstSlash === -1) return null;
-
-        const rest = withoutScheme.slice(firstSlash + 1);
-        return rest.split("?")[0];
-    }
-
-    private async getCacheFiles(): Promise<string[]> {
-        const result = await this.plugin.app.vault.adapter.list(this.cacheDir);
-        return result.files;
-    }
-
-    private async removeOldFiles(files: string[], now: number, maxAge: number): Promise<void> {
-        const adapter = this.plugin.app.vault.adapter;
-
-        for (const file of files) {
-            const stat = await adapter.stat(file);
-            if (stat && (now - stat.mtime > maxAge)) {
-                await adapter.remove(file);
-            }
-        }
-    }
-
-    private buildDeterministicFilename(url: string, meta?: ImageMeta): string {
-        const date = meta?.date ?? new Date();
-        const stamp = this.formatHourStamp(date);
-        const theme = meta?.theme ? this.sanitizeSegment(meta.theme) : "bg";
-
-        const { idPart, hostPart } = this.extractUrlParts(url);
-
-        if (idPart) {
-            return `bg-${stamp}-${theme}-${idPart}.jpg`;
-        }
-
-        const hash = this.fnv1a32(url);
-        const host = hostPart || "remote";
-        return `bg-${stamp}-${theme}-${host}-${hash}.jpg`;
-    }
-
-    private extractUrlParts(url: string): { idPart: string; hostPart: string } {
-        try {
-            const u = new URL(url);
-            const hostPart = this.sanitizeSegment(u.hostname);
-            const match = u.pathname.match(/\/photo-[^/]+/);
-            const idPart = match
-                ? this.sanitizeSegment(match[0].replace("/", ""))
-                : "";
-
-            return { idPart, hostPart };
-        } catch {
-            return { idPart: "", hostPart: "" };
-        }
-    }
-
-    private sanitizeSegment(value: string): string {
-        return value
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, "-")
-            .replace(/[^a-z0-9._-]+/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-|-$/g, "");
-    }
-
-    private formatHourStamp(date: Date): string {
-        const yyyy = date.getFullYear();
-        const mm = String(date.getMonth() + 1).padStart(2, "0");
-        const dd = String(date.getDate()).padStart(2, "0");
-        const hh = String(date.getHours()).padStart(2, "0");
-        return `${yyyy}-${mm}-${dd}_${hh}`;
-    }
-
-    private fnv1a32(input: string): string {
-        // Use fnv1a library - returns bigint, convert to hex string
-        const hash = fnv1a(input, 32);
-        return hash.toString(16).padStart(8, "0");
-    }
+	private simpleHash(str: string): string {
+		let hash = 0;
+		for (let i = 0; i < str.length; i++) {
+			hash = (hash << 5) - hash + str.charCodeAt(i);
+			hash |= 0;
+		}
+		return Math.abs(hash).toString(36);
+	}
 }
+

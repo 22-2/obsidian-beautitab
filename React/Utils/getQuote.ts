@@ -1,6 +1,5 @@
-import { requestUrl } from "obsidian";
-import { QUOTE_SOURCE } from "src/Types/Enums";
-import { CustomQuote } from "src/Types/Interfaces";
+import { fetchPolyfillSafe } from "src/Utils/fetchPolyfillSafe";
+import { QUOTE_SOURCE, CustomQuote } from "React/Components/App/hooks/background/types";
 
 /**
  * Based on the configured quoteSource, gets a random quote from Quoteable, a custom quote, or both.
@@ -23,9 +22,9 @@ const getQuote = async (
 
 	if (actualQuoteSource === QUOTE_SOURCE.QUOTEABLE) {
 		try {
-			const response = await requestUrl("https://dummyjson.com/quotes/random");
+			const response = await fetchPolyfillSafe("https://dummyjson.com/quotes/random");
 			if (response.status === 200) {
-				const data = response.json;
+				const data = await response.json();
 				quote = { content: data.quote, author: data.author };
 			} else {
 				throw new Error("Status not 200");

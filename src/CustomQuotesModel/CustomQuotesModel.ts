@@ -1,7 +1,7 @@
 import BeautitabPlugin from "main";
 import { Modal, Setting } from "obsidian";
 import ConfirmModal from "src/ConfirmModal/ConfirmModal";
-import { CustomQuote } from "src/Types/Interfaces";
+import { CustomQuote } from "React/Components/App/hooks/background/types";
 
 class CustomQuotesModel extends Modal {
 	_onSave: Function;

@@ -1,4 +1,4 @@
-import { TIME_FORMAT } from "src/Types/Enums";
+import { TIME_FORMAT } from "React/Components/App/hooks/background/types";
 
 /**
  * Returns the current time in a 00:00 format, either 12-hour or 24-hour

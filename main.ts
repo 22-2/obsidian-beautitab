@@ -1,12 +1,8 @@
-import type { InternalPluginName, InternalPluginNameType } from "obsidian-typings";
-import { Notice, Platform, Plugin, requestUrl } from "obsidian";
+import type { InternalPluginNameType } from "obsidian-typings";
+import { Notice, Platform, Plugin } from "obsidian";
 import { ReactView, BEAUTITAB_REACT_VIEW } from "./Views/ReactView";
 import { setSettings } from "src/Utils/settingsStore";
-import { normalizeBackgroundCache, hasFreshBackground } from "src/Utils/backgroundCache";
-import { fetchNewBackground } from "src/Utils/backgroundFetcher";
-import { BackgroundTheme } from "src/Types/Enums";
-// @ts-expect-error
-import BackgroundWorker from "src/Utils/background.worker";
+import { BackgroundTheme } from "React/Components/App/hooks/background/types";
 import { QueryClient } from "@tanstack/react-query";
 import { around } from "monkey-around";
 import {
@@ -14,8 +10,13 @@ import {
 	BeautitabPluginSettings,
 	DEFAULT_SETTINGS,
 } from "src/Settings/Settings";
-import { NEW_TAB_BEHAVIOR } from "src/Types/Enums";
 import logger from "src/Utils/logger";
+import { LocalImageCache } from "src/Utils/LocalImageCache";
+import { clearInterval, setInterval } from "worker-timers";
+import { fetchMultipleFromUnsplash } from "React/Components/App/hooks/background/unsplashApi";
+import { getSeasonalTag } from "React/Components/App/hooks/background/seasonalTheme";
+
+const TEN_MINUTES = 10 * 60 * 1000;
 
 /**
  * 開発モード用の設定
@@ -50,145 +51,6 @@ class DevModeManager {
 	}
 }
 
-/**
- * バックグラウンド画像のプリフェッチを管理
- */
-class BackgroundPrefetchManager {
-	private static readonly MIN_FETCH_INTERVAL = 1000 * 60 * 3; // 3分
-
-	private worker: Worker;
-	private isFetching = false;
-	private lastFetchAttempt = 0;
-
-	constructor(
-		private settings: BeautitabPluginSettings,
-		private plugin: BeautitabPlugin
-	) {}
-
-	start() {
-		this.worker = new BackgroundWorker();
-		this.worker.onmessage = (e) => {
-			if (e.data.type === "check") {
-				this.checkAndPrefetch();
-			}
-		};
-		this.worker.postMessage({ type: "start" });
-	}
-
-	stop() {
-		if (this.worker) {
-			this.worker.postMessage({ type: "stop" });
-			this.worker.terminate();
-		}
-	}
-
-	private async checkAndPrefetch() {
-		if (this.isFetching || !this.canAttemptFetch()) {
-			return;
-		}
-
-		const nextHour = this.getNextHourTimestamp();
-		const cacheKey = this.getCacheKey();
-
-		if (this.hasBackgroundForNextHour(cacheKey, nextHour)) {
-			return;
-		}
-
-		await this.fetchBackground(nextHour);
-	}
-
-	private canAttemptFetch(): boolean {
-		return Date.now() - this.lastFetchAttempt >= BackgroundPrefetchManager.MIN_FETCH_INTERVAL;
-	}
-
-	private getNextHourTimestamp(): Date {
-		const now = new Date();
-		const nextHour = new Date(now);
-		nextHour.setHours(now.getHours() + 1);
-		nextHour.setMinutes(0, 0, 0);
-		return nextHour;
-	}
-
-	private getCacheKey(): string {
-		const { backgroundTheme, customBackground } = this.settings;
-
-		if (backgroundTheme === BackgroundTheme.CUSTOM && customBackground) {
-			return `custom:${customBackground}`;
-		}
-
-		return `unsplash:${backgroundTheme}`;
-	}
-
-	private hasBackgroundForNextHour(cacheKey: string, nextHour: Date): boolean {
-		return hasFreshBackground(
-			this.settings.backgroundCache || {},
-			cacheKey,
-			{ now: nextHour }
-		);
-	}
-
-	private async fetchBackground(nextHour: Date) {
-		try {
-			this.isFetching = true;
-			this.lastFetchAttempt = Date.now();
-			logger.info("Beautitab: Prefetching background for next hour...");
-
-			// Directly call fetchNewBackground, which internally uses queryClient.fetchQuery
-			// This avoids a deadlock where prefetchQuery waits for fetchNewBackground which waits for the same query key
-			await fetchNewBackground({
-				settings: this.settings,
-				plugin: this.plugin,
-				now: nextHour,
-			});
-		} catch (error) {
-			logger.error("Beautitab: Failed to prefetch background", error);
-		} finally {
-			this.isFetching = false;
-		}
-	}
-}
-
-/**
- * 新規タブの動作をパッチ
- */
-class NewTabPatcher {
-	private uninstallPatch?: () => void;
-
-	constructor(
-		private app: any,
-		private settings: BeautitabPluginSettings
-	) {}
-
-	patch() {
-		this.uninstallPatch = around(
-			this.app.commands.commands["workspace:new-tab"],
-			{
-				checkCallback: (next: any) => {
-					return (checking: boolean) => {
-						if (this.settings.newTabBehavior === NEW_TAB_BEHAVIOR.OVERRIDE) {
-							if (!checking) {
-								this.app.workspace.getLeaf(true).setViewState({
-									type: BEAUTITAB_REACT_VIEW,
-									active: true,
-								});
-							}
-							return true;
-						}
-						return next ? next(checking) : false;
-					};
-				},
-			}
-		);
-	}
-
-	unpatch() {
-		if (this.uninstallPatch) {
-			this.uninstallPatch();
-		}
-	}
-
-
-}
 
 /**
  * バージョンチェック機能
@@ -250,49 +112,154 @@ class NewTabPatcher {
 export default class BeautitabPlugin extends Plugin {
 	settings: BeautitabPluginSettings;
 	queryClient: QueryClient;
-
-	private prefetchManager?: BackgroundPrefetchManager;
-	private tabPatcher?: NewTabPatcher;
+	imageCache!: LocalImageCache;
+	private backgroundCheckTimer: number | null = null;
 
 	async onload() {
-		await this.initializeSettings();
-		this.applyLogLevel();
-
 		logger.info("Beautitab: Plugin Loading... VERSION CHECK " + Date.now());
-		DevModeManager.initialize();
-
-		await this.initializeSettings();
-		this.initializeQueryClient();
-		this.cleanupLegacyStorage();
-		this.setupView();
-		this.setupSettingsTab();
-		this.setupEventListeners();
-		this.setupNewTabBehavior();
-
-		DevModeManager.configureMobileEmulation(this.app);
-
-		this.startBackgroundPrefetch();
+		this.app.workspace.onLayoutReady(async () => {
+			this.setupView();
+			this.imageCache = new LocalImageCache(this);
+			this.queryClient = new QueryClient();
+			await this.initializeSettings();
+			this.applyLogLevel();
+			DevModeManager.initialize();
+			this.addSettingTab(new BeautitabPluginSettingTab(this.app, this));
+			DevModeManager.configureMobileEmulation(this.app);
+			this.patchNewTab();
+			this.startBackgroundCheck();
+		});
 	}
 
-	onunload() {
-		logger.info("unloading Beautitab");
-		this.prefetchManager?.stop();
-		this.tabPatcher?.unpatch();
+	/**
+	 * Start periodic wallpaper prefetch (every 10 minutes)
+	 * Fetches wallpapers for current hour and next hour
+	 */
+	private startBackgroundCheck() {
+		// Initial prune (only at startup)
+		this.imageCache.prune();
+
+		// Initial fetch
+		this.prefetchWallpapers();
+
+		// Schedule periodic fetch
+		this.backgroundCheckTimer = setInterval(() => {
+			this.prefetchWallpapers();
+		}, TEN_MINUTES);
+	}
+
+	/**
+	 * Prefetch wallpapers for current hour and next hour
+	 */
+	async prefetchWallpapers() {
+		const { backgroundTheme, apiKey } = this.settings;
+
+		// Skip for themes that don't need prefetching
+		if (
+			backgroundTheme === BackgroundTheme.CUSTOM ||
+			backgroundTheme === BackgroundTheme.LOCAL ||
+			backgroundTheme === BackgroundTheme.TRANSPARENT ||
+			backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
+		) {
+			return;
+		}
+
+		// Skip if no API key
+		if (!apiKey) {
+			logger.debug("Skipping prefetch: no API key");
+			return;
+		}
+
+		const now = new Date();
+		const nextHour = new Date(now);
+		nextHour.setHours(nextHour.getHours() + 1);
+
+		// Check what we already have cached
+		const currentCached = await this.imageCache.getForHour(backgroundTheme, now);
+		const nextCached = await this.imageCache.getForHour(backgroundTheme, nextHour);
+
+		// Both cached, nothing to do
+		if (currentCached && nextCached) {
+			logger.debug("Both hours already cached");
+			return;
+		}
+
+		// Determine how many to fetch
+		const needCount = (currentCached ? 0 : 1) + (nextCached ? 0 : 1);
+		if (needCount === 0) return;
+
+		logger.debug("Prefetching wallpapers", {
+			currentHour: now.getHours(),
+			nextHour: nextHour.getHours(),
+			needCount,
+		});
+
+		try {
+			// Fetch required number of unique images in one request
+			const query = backgroundTheme === BackgroundTheme.SEASONS_AND_HOLIDAYS
+				? getSeasonalTag(now)
+				: backgroundTheme;
+
+			const images = await fetchMultipleFromUnsplash(
+				apiKey,
+				query,
+				backgroundTheme,
+				needCount
+			);
+
+			if (images.length === 0) {
+				logger.debug("No images from Unsplash");
+				return;
+			}
+
+			let imageIndex = 0;
+
+			// Cache for current hour if needed
+			if (!currentCached && images[imageIndex]) {
+				await this.imageCache.cache(images[imageIndex].url, backgroundTheme, now);
+				imageIndex++;
+			}
+
+			// Cache for next hour if needed (guaranteed different image)
+			if (!nextCached && images[imageIndex]) {
+				await this.imageCache.cache(images[imageIndex].url, backgroundTheme, nextHour);
+			}
+
+			logger.debug("Wallpaper prefetch complete");
+		} catch (e) {
+			logger.error("Prefetch error:", e);
+		}
+	}
+
+	private stopBackgroundCheck() {
+		if (this.backgroundCheckTimer !== null) {
+			clearInterval(this.backgroundCheckTimer);
+			this.backgroundCheckTimer = null;
+		}
+	}
+
+	patchNewTab() {
+		this.register(around(
+			this.app.commands.commands["workspace:new-tab"],
+			{
+				checkCallback: (next: any) => {
+					return (checking: boolean) => {
+							if (!checking) {
+								return this.app.workspace.getLeaf(true).setViewState({
+									type: BEAUTITAB_REACT_VIEW,
+									active: true,
+								});
+							}
+						return next ? next(checking) : true;
+					};
+				},
+			}
+		));
 	}
 
 	private async initializeSettings() {
 		await this.loadSettings();
 		setSettings(this.settings);
-	}
-
-	private initializeQueryClient() {
-		this.queryClient = new QueryClient();
-	}
-
-	private cleanupLegacyStorage() {
-		if (localStorage.getItem("beautitab-bg-queue")) {
-			localStorage.removeItem("beautitab-bg-queue");
-		}
 	}
 
 	private setupView() {
@@ -302,28 +269,9 @@ export default class BeautitabPlugin extends Plugin {
 		);
 	}
 
-	private setupSettingsTab() {
-		this.addSettingTab(new BeautitabPluginSettingTab(this.app, this));
-	}
-
-	private setupEventListeners() {
-
-	}
-
-	private setupNewTabBehavior() {
-		this.tabPatcher = new NewTabPatcher(this.app, this.settings);
-		this.tabPatcher.patch();
-	}
-
-	private startBackgroundPrefetch() {
-		this.prefetchManager = new BackgroundPrefetchManager(this.settings, this);
-		this.prefetchManager.start();
-	}
-
 	async loadSettings() {
 		const data = (await this.loadData()) || {};
 		const merged = Object.assign({}, DEFAULT_SETTINGS, data);
-		merged.backgroundCache = normalizeBackgroundCache(merged.backgroundCache);
 		this.settings = merged;
 	}
 

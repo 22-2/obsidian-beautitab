@@ -10,15 +10,17 @@ import {
 	NEW_TAB_BEHAVIOR,
 	QUOTE_SOURCE,
 	TIME_FORMAT,
-} from "src/Types/Enums";
-import { BackgroundCache, CachedBackground, CustomQuote, SearchProvider } from "src/Types/Interfaces";
+	CachedBackground, 
+	CustomQuote, 
+	SearchProvider
+} from "React/Components/App/hooks/background/types";
 import capitalizeFirstLetter from "src/Utils/capitalizeFirstLetter";
 import electron from "electron";
 import ConfirmModal from "src/ConfirmModal/ConfirmModal";
 import ChooseImageSuggestModal from "src/ChooseImageSuggestModal/ChooseImageSuggestModal";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
-import { clearBackgroundCache } from "src/Utils/backgroundCacheStore";
 import { setSettings } from "src/Utils/settingsStore";
+
 
 const DEFAULT_SEARCH_PROVIDER: SearchProvider = {
 	command: "switcher:open",
@@ -56,8 +58,6 @@ export interface BeautitabPluginSettings {
 	apiKey: string;
 	newTabBehavior: NEW_TAB_BEHAVIOR;
 	enableLogging: boolean;
-	cachedBackground?: CachedBackground;
-	backgroundCache?: BackgroundCache;
 }
 
 export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
@@ -84,7 +84,6 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	apiKey: "",
 	newTabBehavior: NEW_TAB_BEHAVIOR.OVERRIDE,
 	enableLogging: true,
-	backgroundCache: {},
 };
 
 export class BeautitabPluginSettingTab extends PluginSettingTab {
@@ -230,15 +229,9 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 								const imageCache = new LocalImageCache(
 									this.plugin
 								);
-								await imageCache.clearAll();
-
-								// Clear metadata cache
-								await clearBackgroundCache();
+								await imageCache.clear();
 
 								// Reset settings cache
-								this.plugin.settings.backgroundCache = {};
-								this.plugin.settings.cachedBackground =
-									undefined;
 								await this.plugin.saveSettings();
 
 								// Clear React Query cache

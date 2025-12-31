@@ -3,7 +3,7 @@ import { useObsidian } from "../../Context/ObsidianAppContext";
 import { TFile } from "obsidian";
 import BeautitabPlugin from "main";
 import { getBookmarks } from "React/Utils/getBookmarks";
-import { BackgroundTheme } from "src/Types/Enums";
+import { BackgroundTheme } from "React/Components/App/hooks/background/types";
 
 // Hooks
 import {
@@ -35,7 +35,7 @@ const App: React.FC<AppProps> = ({ plugin }) => {
 	// Custom hooks
 	const settings = useSettings();
 	const time = useTime(settings.timeFormat);
-	const quote = useQuote(settings.quoteSource, settings.customQuotes);
+	const quote = useQuote(settings.quoteSource, settings.customQuotes, settings.showQuote);
 	const { isBackgroundVisible, backgroundStyle } = useBackground(settings, plugin);
 	const recentFiles = useRecentFiles(obsidian, 5);
 

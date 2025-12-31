@@ -91,7 +91,6 @@ test("wallpaper should persist when reopening tabs", async ({ obsidian }) => {
     if (plugin) {
         plugin.settings.backgroundTheme = "custom";
         plugin.settings.customBackground = "https://images.unsplash.com/photo-1545569341-9eb8b30979d9";
-        plugin.settings.cachedBackground = null; // Clear cache
         await plugin.saveSettings();
     }
   });
@@ -156,7 +155,6 @@ test("wallpaper should NOT change on hour change (stays fixed to mount time)", a
       if (plugin) {
           plugin.settings.backgroundTheme = "custom";
           plugin.settings.customBackground = url;
-          plugin.settings.cachedBackground = null; // Clear cache
           await plugin.saveSettings();
           console.log("Settings saved.");
       }
@@ -232,7 +230,6 @@ test("next hour background should be prefetched", async ({ obsidian }) => {
     if (plugin) {
         plugin.settings.backgroundTheme = "seasons and holidays";
         plugin.settings.apiKey = apiKey;
-        plugin.settings.cachedBackground = null;
         await plugin.saveSettings();
         console.log("Settings configured for prefetch test");
     }
@@ -259,23 +256,30 @@ test("next hour background should be prefetched", async ({ obsidian }) => {
 
   console.log("Prefetch logs:", prefetchLogs);
 
-  // Check if backgroundCache has entries
-  const cacheInfo = await obsidian.page.evaluate(() => {
+  // Check if backgrounds are cached in LocalImageCache
+  const cacheInfo = await obsidian.page.evaluate(async () => {
     const plugin = app.plugins.getPlugin("beautitab") as any;
     if (!plugin) return { error: "Plugin not found" };
 
-    const cache = plugin.settings.backgroundCache || {};
-    const cacheKeys = Object.keys(cache);
+    const cacheDir = `${plugin.manifest.dir}/bg-cache`;
+    const adapter = plugin.app.vault.adapter;
 
-    return {
-      cacheKeys,
-      cacheCount: cacheKeys.length,
-      hasCache: cacheKeys.length > 0,
-      cacheDetails: Object.entries(cache).map(([key, value]: [string, any]) => ({
-        key,
-        itemCount: Array.isArray(value?.items) ? value.items.length : 0,
-      })),
-    };
+    try {
+      const exists = await adapter.exists(cacheDir);
+      if (!exists) {
+        return { exists: false, hasCache: false };
+      }
+
+      const list = await adapter.list(cacheDir);
+      return {
+        exists: true,
+        fileCount: list.files.length,
+        hasCache: list.files.length > 0,
+        files: list.files
+      };
+    } catch (e: any) {
+      return { error: e.message };
+    }
   });
 
   console.log("Cache info:", cacheInfo);
@@ -284,7 +288,7 @@ test("next hour background should be prefetched", async ({ obsidian }) => {
   // @ts-ignore
   expect(cacheInfo.hasCache).toBe(true);
   // @ts-ignore
-  expect(cacheInfo.cacheCount).toBeGreaterThan(0);
+  expect(cacheInfo.fileCount).toBeGreaterThan(0);
 
   console.log("Prefetch test completed successfully");
 });
@@ -316,7 +320,6 @@ test("only one background image should be cached per hour", async ({ obsidian })
     if (plugin) {
         plugin.settings.backgroundTheme = "seasons and holidays";
         plugin.settings.apiKey = apiKey;
-        plugin.settings.cachedBackground = null; // Clear cache
         await plugin.saveSettings();
         console.log("Settings configured for single image test");
     }
@@ -405,7 +408,6 @@ test("existing tab should keep background while new tab gets fresh one on hour c
     if (plugin) {
         plugin.settings.backgroundTheme = "seasons and holidays";
         plugin.settings.apiKey = apiKey;
-        plugin.settings.cachedBackground = null;
         await plugin.saveSettings();
     }
   }, UNSPLASH_API_KEY);
@@ -525,7 +527,6 @@ test("existing tab should keep background on day rollover", async ({ obsidian, p
     if (plugin) {
         plugin.settings.backgroundTheme = "seasons and holidays";
         plugin.settings.apiKey = apiKey;
-        plugin.settings.cachedBackground = null;
         await plugin.saveSettings();
     }
   }, UNSPLASH_API_KEY);

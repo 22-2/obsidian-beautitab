@@ -3,7 +3,7 @@ import {
 	BeautitabPluginSettings,
 	SEARCH_PROVIDER,
 } from "src/Settings/Settings";
-import { SearchProvider } from "src/Types/Interfaces";
+import { SearchProvider } from "React/Components/App/hooks/background/types";
 
 /**
  * This class is used to create a modal to choose a search provider from a list of available search providers

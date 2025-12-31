@@ -39,6 +39,7 @@
 	},
 	"dependencies": {
 		"@tanstack/react-query": "^5.90.12",
+		"date-fns": "^4.1.0",
 		"electron": "^39.2.3",
 		"esbuild-copy-static-files": "^0.1.0",
 		"esbuild-sass-plugin": "^3.3.1",
@@ -47,9 +48,11 @@
 		"loglevel": "^1.9.2",
 		"monkey-around": "^3.0.0",
 		"obsidian-e2e-toolkit": "git+https://github.com/22-2/obsidian-e2e-toolkit.git",
+		"p-queue": "^9.0.1",
 		"preact": "^10.28.0",
 		"react": "^19.2.0",
 		"react-dom": "^19.2.0",
-		"store2": "^2.14.4"
+		"store2": "^2.14.4",
+		"worker-timers": "^8.0.27"
 	}
 }

@@ -1,6 +1,6 @@
 import { App, TAbstractFile } from "obsidian";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
-import { BOOKMARK_SOURCE } from "src/Types/Enums";
+import { BOOKMARK_SOURCE } from "React/Components/App/hooks/background/types";
 import logger from "src/Utils/logger";
 
 /**
