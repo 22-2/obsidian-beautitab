@@ -24,7 +24,7 @@ export const useBackground = (
 	plugin: BeautitabPlugin
 ): UseBackgroundResult => {
 	// Track effective time for background selection
-	const { effectiveTime, currentHour, currentDay } = useEffectiveTime(settings);
+	const { effectiveTime, currentHour, currentDay } = useEffectiveTime();
 
 	// Check if cached background is usable
 	const isCachedUsable = useCacheValidation(

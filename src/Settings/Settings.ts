@@ -45,7 +45,7 @@ export interface BeautitabPluginSettings {
 	greetingText: string;
 	showInlineSearch: boolean;
 	inlineSearchProvider: SearchProvider;
-	refreshBackgroundOnHourChange: boolean;
+
 	showRecentFiles: boolean;
 	showBookmarks: boolean;
 	bookmarkSource: BOOKMARK_SOURCE;
@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	greetingText: "Hello, Beautiful.",
 	showInlineSearch: true,
 	inlineSearchProvider: DEFAULT_SEARCH_PROVIDER,
-	refreshBackgroundOnHourChange: true,
+
 	showRecentFiles: true,
 	showBookmarks: false,
 	bookmarkSource: BOOKMARK_SOURCE.ALL,
@@ -211,21 +211,7 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(containerEl)
-			.setName("Refresh background on hour change")
-			.setDesc(
-				"Automatically switch to a new background when the hour changes while the tab is open. If disabled, the background will only change when you open a new tab."
-			)
-			.addToggle((component) => {
-				component.setValue(
-					this.plugin.settings.refreshBackgroundOnHourChange
-				);
-				component.onChange((value) => {
-					this.plugin.settings.refreshBackgroundOnHourChange = value;
-					setSettings(this.plugin.settings);
-					this.plugin.saveSettings();
-				});
-			});
+
 
 		new Setting(containerEl)
 			.setName("Clear background cache")

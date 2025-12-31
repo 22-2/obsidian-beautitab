@@ -1,47 +1,24 @@
-import { useState, useEffect, useMemo } from "react";
-import { BeautitabPluginSettings } from "src/Settings/Settings";
-import logger from "src/Utils/logger";
-import { HOUR_CHECK_INTERVAL } from "./constants";
+import { useMemo } from "react";
 
 /**
  * Hook to track effective time for background switching
  * 
- * When refreshBackgroundOnHourChange is enabled, this hook polls for hour
- * changes and updates the effective time accordingly. Otherwise, it uses
- * the mount time (static).
+ * The effective time is fixed to the mount time. This ensures that once a tab
+ * is opened, its background stays consistent and won't change due to hour updates.
+ * New tabs will use the current time when they mount, getting the appropriate
+ * background for that time.
+ * 
+ * This design prevents the issue where multiple tabs would each fetch different
+ * backgrounds when the hour changes.
  */
-export const useEffectiveTime = (settings: BeautitabPluginSettings) => {
+export const useEffectiveTime = () => {
+	// Use mount time as the fixed effective time for this tab instance
 	const mountTime = useMemo(() => new Date(), []);
-	const [currentTime, setCurrentTime] = useState(() => new Date());
-
-	// Poll for hour changes when enabled
-	useEffect(() => {
-		if (!settings.refreshBackgroundOnHourChange) return;
-
-		const checkInterval = setInterval(() => {
-			setCurrentTime((prev) => {
-				const now = new Date();
-				if (now.getHours() !== prev.getHours()) {
-					logger.info("Beautitab: Hour changed, updating background", {
-						from: prev.getHours(),
-						to: now.getHours(),
-					});
-					return now;
-				}
-				return prev;
-			});
-		}, HOUR_CHECK_INTERVAL);
-
-		return () => clearInterval(checkInterval);
-	}, [settings.refreshBackgroundOnHourChange]);
-
-	const effectiveTime = settings.refreshBackgroundOnHourChange
-		? currentTime
-		: mountTime;
 
 	return {
-		effectiveTime,
-		currentHour: effectiveTime.getHours(),
-		currentDay: effectiveTime.toDateString(),
+		effectiveTime: mountTime,
+		currentHour: mountTime.getHours(),
+		currentDay: mountTime.toDateString(),
 	};
 };
+
