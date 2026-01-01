@@ -74,13 +74,18 @@ export const getBookmarks = (
 	return bookmarkFiles;
 };
 
+interface BookmarkGroup {
+	title: string;
+	path: string | null;
+}
+
 /**
  * Recursive function to return all bookmark groups with their paths
  * @param items
  * @param parentPath
  */
 const flattenBookmarkGroups = (items: any[], parentPath = null) => {
-	let flattedGroups: any[] = [];
+	let flattedGroups: BookmarkGroup[] = [];
 
 	items.forEach((item) => {
 		if (item.type === "group") {
@@ -102,8 +107,7 @@ const flattenBookmarkGroups = (items: any[], parentPath = null) => {
  * @param app
  */
 export const getBookmarkGroups = (app: App) => {
-	// @ts-ignore
-	let bookmarks = app?.internalPlugins.plugins.bookmarks.instance.items;
+	let bookmarks = app?.internalPlugins.plugins.bookmarks.instance.items || [];
 
 	return flattenBookmarkGroups(bookmarks);
 };
