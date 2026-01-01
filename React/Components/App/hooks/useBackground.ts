@@ -4,6 +4,7 @@ import BeautitabPlugin from "main";
 import logger from "src/Utils/logger";
 import { BackgroundTheme } from "React/Components/App/hooks/background/types";
 import React from "react";
+import { clearTimeout, setTimeout } from "worker-timers"
 
 // ============================================================================
 // Types
@@ -48,8 +49,15 @@ const resolveUrl = (url: string, plugin: BeautitabPlugin): string => {
 const preloadImage = (url: string): Promise<void> => {
 	return new Promise((resolve) => {
 		const img = new Image();
-		img.onload = () => resolve();
-		img.onerror = () => resolve();
+		const timeout = setTimeout(resolve, 5000); // 5s timeout
+		img.onload = () => {
+			clearTimeout(timeout);
+			resolve();
+		};
+		img.onerror = () => {
+			clearTimeout(timeout);
+			resolve();
+		};
 		img.src = url;
 	});
 };
@@ -145,6 +153,15 @@ export const useBackground = (
 						const resolved = plugin.imageCache.getResourcePath(retryPath);
 						await preloadImage(resolved);
 						setBackgroundUrl(resolved);
+					} else {
+						// Final fallback: get ANY latest image for this theme
+						logger.debug("useBackground: prefetch failed, using latest fallback");
+						const fallbackPath = await plugin.imageCache.getLatestForTheme(backgroundTheme);
+						if (fallbackPath) {
+							const resolved = plugin.imageCache.getResourcePath(fallbackPath);
+							await preloadImage(resolved);
+							setBackgroundUrl(resolved);
+						}
 					}
 				}
 			} catch (e) {

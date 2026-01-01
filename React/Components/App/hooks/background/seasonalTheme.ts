@@ -18,7 +18,7 @@ export const isWithinDaysBefore = (
 	days: number,
 	dateB: Date
 ): boolean => {
-	return isBefore(dateA, dateB) && differenceInDays(dateB, dateA) < days;
+	return isBefore(dateA, dateB) && differenceInDays(dateB, dateA) <= days;
 };
 
 /**

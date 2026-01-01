@@ -63,6 +63,35 @@ export class LocalImageCache {
 	}
 
 	/**
+	 * Get the latest cached wallpaper for a specific theme.
+	 * Returns the file path if found, null otherwise.
+	 */
+	async getLatestForTheme(theme: string): Promise<string | null> {
+		try {
+			await this.ensureDir();
+			const themeSlug = this.slugify(theme);
+			const { files } = await this.adapter.list(this.cacheDir);
+
+			// Find files matching this theme, sorted by date (filename)
+			const matches = files
+				.filter((f) => {
+					const filename = f.split("/").pop() || "";
+					return filename.startsWith(`${themeSlug}-`);
+				})
+				.sort((a, b) => b.localeCompare(a)); // Latest first
+
+			if (matches.length > 0) {
+				logger.debug("Found latest cached wallpaper for theme:", matches[0]);
+				return matches[0];
+			}
+			return null;
+		} catch (e) {
+			logger.error("getLatestForTheme error:", e);
+			return null;
+		}
+	}
+
+	/**
 	 * Downloads and caches an image, returning the local path.
 	 * If already cached or local, returns the existing path.
 	 */

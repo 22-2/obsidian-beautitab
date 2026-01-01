@@ -12,7 +12,7 @@ import {
 } from "src/Settings/Settings";
 import logger from "src/Utils/logger";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
-import { clearInterval, setInterval } from "worker-timers";
+import { clearInterval, setInterval, setTimeout, clearTimeout } from "worker-timers";
 import { fetchMultipleFromUnsplash } from "React/Components/App/hooks/background/unsplashApi";
 import { getSeasonalTag } from "React/Components/App/hooks/background/seasonalTheme";
 import { addHours, getHours } from "date-fns";
@@ -179,25 +179,30 @@ export default class BeautitabPlugin extends Plugin {
 		}
 
 		this.prefetchPromise = (async () => {
-			const { backgroundTheme, apiKey } = this.settings;
-
-			// Skip for themes that don't need prefetching
-			if (
-				backgroundTheme === BackgroundTheme.CUSTOM ||
-				backgroundTheme === BackgroundTheme.LOCAL ||
-				backgroundTheme === BackgroundTheme.TRANSPARENT ||
-				backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
-			) {
-				return;
-			}
-
-			// Skip if no API key
-			if (!apiKey) {
-				logger.debug("Skipping prefetch: no API key");
-				return;
-			}
+			const timeout = setTimeout(() => {
+				this.prefetchPromise = null;
+				logger.error("Beautitab: Prefetch timed out after 30s");
+			}, 30000);
 
 			try {
+				const { backgroundTheme, apiKey } = this.settings;
+
+				// Skip for themes that don't need prefetching
+				if (
+					backgroundTheme === BackgroundTheme.CUSTOM ||
+					backgroundTheme === BackgroundTheme.LOCAL ||
+					backgroundTheme === BackgroundTheme.TRANSPARENT ||
+					backgroundTheme === BackgroundTheme.TRANSPARENT_WITH_SHADOWS
+				) {
+					return;
+				}
+
+				// Skip if no API key
+				if (!apiKey) {
+					logger.debug("Skipping prefetch: no API key");
+					return;
+				}
+
 				const now = new Date();
 				const targetHours = [now, addHours(now, 1)];
 
@@ -253,6 +258,7 @@ export default class BeautitabPlugin extends Plugin {
 			} catch (e) {
 				logger.error("Prefetch error:", e);
 			} finally {
+				clearTimeout(timeout);
 				this.prefetchPromise = null;
 			}
 		})();
