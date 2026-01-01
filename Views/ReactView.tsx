@@ -6,10 +6,8 @@ import ReactApp from "../React/Components/App/App";
 import { ObsidianContext } from "../React/Context/ObsidianAppContext";
 import { settingsStore } from "src/Utils/settingsStore";
 import BeautitabPlugin from "main";
-import i18next from "i18next";
 
 export const BEAUTITAB_REACT_VIEW = "beautitab-react-view";
-const Translate = i18next.t.bind(i18next);
 
 export class ReactView extends ItemView {
 	root: Root | null = null;
@@ -31,7 +29,7 @@ export class ReactView extends ItemView {
 	}
 
 	getDisplayText() {
-		return Translate("interface.label-new-tab");
+		return "New Tab";
 	}
 
 	getIcon() {
