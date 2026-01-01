@@ -2,13 +2,14 @@ import { App, TAbstractFile } from "obsidian";
 import { BeautitabPluginSettings } from "src/Settings/Settings";
 import { BOOKMARK_SOURCE } from "React/Components/App/hooks/background/types";
 import logger from "src/Utils/logger";
+import { BookmarkItem } from "obsidian-typings";
 
 /**
  * Recursively gets all bookmarks
  * @param items
  */
 const flattenBookmarks = (items: any[]) => {
-	let flattedBookmarks: any[] = [];
+	let flattedBookmarks: BookmarkItem[] = [];
 
 	items.forEach((item) => {
 		if (item.type === "file") {
@@ -29,7 +30,7 @@ const flattenBookmarks = (items: any[]) => {
  * @param items
  */
 const getBookmarksByGroupName = (title: string, items: any[]) => {
-	let flattedBookmarks: any[] = [];
+	let flattedBookmarks: BookmarkItem[] = [];
 
 	items.forEach((item) => {
 		if (item.type === "group") {
@@ -58,8 +59,7 @@ export const getBookmarks = (
 	app: App | undefined,
 	settings: BeautitabPluginSettings
 ): TAbstractFile[] => {
-	// @ts-ignore
-	let bookmarks = app?.internalPlugins.plugins.bookmarks.instance.items;
+	let bookmarks = app?.internalPlugins.plugins.bookmarks.instance.items || [];
 
 	if (settings.bookmarkSource === BOOKMARK_SOURCE.GROUP) {
 		bookmarks = getBookmarksByGroupName(settings.bookmarkGroup, bookmarks);
@@ -67,8 +67,8 @@ export const getBookmarks = (
 		bookmarks = flattenBookmarks(bookmarks);
 	}
 
-	const bookmarkFiles = bookmarks.map((bookmark: any) =>
-		app?.vault.getAbstractFileByPath(bookmark.path)
+	const bookmarkFiles = bookmarks.map((bookmark: BookmarkItem) =>
+		app?.vault.getAbstractFileByPath(bookmark.path!)!
 	);
 
 	return bookmarkFiles;
