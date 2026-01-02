@@ -12,7 +12,12 @@ import {
 } from "src/Settings/Settings";
 import logger from "src/Utils/logger";
 import { LocalImageCache } from "src/Utils/LocalImageCache";
-import { clearInterval, setInterval, setTimeout, clearTimeout } from "worker-timers";
+import {
+	clearInterval,
+	setInterval,
+	setTimeout,
+	clearTimeout,
+} from "worker-timers";
 import { fetchMultipleFromUnsplash } from "React/Components/App/hooks/background/unsplashApi";
 import { getSeasonalTag } from "React/Components/App/hooks/background/seasonalTheme";
 import { addHours, getHours } from "date-fns";
@@ -32,17 +37,18 @@ class DevModeManager {
 	}
 
 	private static setupHotReload() {
-		new EventSource(this.HOT_RELOAD_URL).addEventListener(
-			"change",
-			() => location.reload()
+		new EventSource(this.HOT_RELOAD_URL).addEventListener("change", () =>
+			location.reload()
 		);
 	}
 
 	static configureMobileEmulation(app: any) {
 		if (process.env.NODE_ENV !== "development") return;
 
-		const shouldEmulateMobile = process.env.EMULATE_MOBILE && !Platform.isMobile;
-		const shouldDisableEmulation = !process.env.EMULATE_MOBILE && Platform.isMobile;
+		const shouldEmulateMobile =
+			process.env.EMULATE_MOBILE && !Platform.isMobile;
+		const shouldDisableEmulation =
+			!process.env.EMULATE_MOBILE && Platform.isMobile;
 
 		if (shouldEmulateMobile) {
 			app.emulateMobile(true);
@@ -51,7 +57,6 @@ class DevModeManager {
 		}
 	}
 }
-
 
 /**
  * バージョンチェック機能
@@ -226,7 +231,9 @@ export default class BeautitabPlugin extends Plugin {
 				logger.debug("Prefetching wallpapers", {
 					currentHour: getHours(now),
 					needCount,
-					missingHours: missingIndices.map((i) => getHours(targetHours[i])),
+					missingHours: missingIndices.map((i) =>
+						getHours(targetHours[i])
+					),
 				});
 
 				// Fetch required number of unique images in one request
@@ -251,7 +258,11 @@ export default class BeautitabPlugin extends Plugin {
 				for (let i = 0; i < images.length; i++) {
 					const hourIndex = missingIndices[i];
 					const hour = targetHours[hourIndex];
-					await this.imageCache.cache(images[i].url, backgroundTheme, hour);
+					await this.imageCache.cache(
+						images[i].url,
+						backgroundTheme,
+						hour
+					);
 				}
 
 				logger.debug("Wallpaper prefetch complete");
@@ -274,22 +285,33 @@ export default class BeautitabPlugin extends Plugin {
 	}
 
 	patchNewTab() {
-		this.register(around(
-			this.app.commands.commands["workspace:new-tab"],
-			{
+		this.register(
+			around(this.app.commands.commands["workspace:new-tab"], {
 				checkCallback: (next: any) => {
 					return (checking: boolean) => {
-							if (!checking) {
-								return this.app.workspace.getLeaf(true).setViewState({
+						if (!checking) {
+							return this.app.workspace
+								.getLeaf(true)
+								.setViewState({
 									type: BEAUTITAB_REACT_VIEW,
 									active: true,
 								});
-							}
+						}
 						return next ? next(checking) : true;
 					};
 				},
-			}
-		));
+			})
+		);
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => {
+				const leaf = this.app.workspace.getMostRecentLeaf();
+				if (leaf?.getViewState().type === "empty") {
+					leaf.setViewState({
+						type: BEAUTITAB_REACT_VIEW,
+					});
+				}
+			})
+		);
 	}
 
 	private async initializeSettings() {
