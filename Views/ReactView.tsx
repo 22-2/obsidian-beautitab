@@ -13,6 +13,7 @@ export class ReactView extends ItemView {
 	root: Root | null = null;
 	app: App;
 	plugin: BeautitabPlugin;
+	navigation = true;
 
 	constructor(
 		app: App,

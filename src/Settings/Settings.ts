@@ -43,6 +43,7 @@ export interface BeautitabPluginSettings {
 	topLeftSearchProvider: SearchProvider;
 	showTime: boolean;
 	timeFormat: TIME_FORMAT;
+	showSeconds: boolean;
 	showGreeting: boolean;
 	greetingText: string;
 	showInlineSearch: boolean;
@@ -69,6 +70,7 @@ export const DEFAULT_SETTINGS: BeautitabPluginSettings = {
 	topLeftSearchProvider: DEFAULT_SEARCH_PROVIDER,
 	showTime: true,
 	timeFormat: TIME_FORMAT.TWELVE_HOUR,
+	showSeconds: false,
 	showGreeting: true,
 	greetingText: "Hello, Beautiful.",
 	showInlineSearch: true,
@@ -469,6 +471,19 @@ export class BeautitabPluginSettingTab extends PluginSettingTab {
 
 				component.onChange((value: TIME_FORMAT) => {
 					this.plugin.settings.timeFormat = value;
+					setSettings(this.plugin.settings);
+					this.plugin.saveSettings();
+					this.display();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Show seconds")
+			.setDesc(`Should the time include seconds?`)
+			.addToggle((component) => {
+				component.setValue(this.plugin.settings.showSeconds);
+				component.onChange((value) => {
+					this.plugin.settings.showSeconds = value;
 					setSettings(this.plugin.settings);
 					this.plugin.saveSettings();
 					this.display();

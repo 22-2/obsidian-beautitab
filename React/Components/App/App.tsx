@@ -34,8 +34,12 @@ const App: React.FC<AppProps> = ({ plugin }) => {
 
 	// Custom hooks
 	const settings = useSettings();
-	const time = useTime(settings.timeFormat);
-	const quote = useQuote(settings.quoteSource, settings.customQuotes, settings.showQuote);
+	const time = useTime(settings.timeFormat, settings.showSeconds);
+	const quote = useQuote(
+		settings.quoteSource,
+		settings.customQuotes,
+		settings.showQuote
+	);
 	const { isBackgroundVisible, backgroundStyle } = useBackground(settings, plugin);
 	const recentFiles = useRecentFiles(obsidian, 5);
 

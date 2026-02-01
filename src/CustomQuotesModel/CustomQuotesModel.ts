@@ -1,6 +1,5 @@
 import BeautitabPlugin from "main";
 import { Modal, Setting } from "obsidian";
-import ConfirmModal from "src/ConfirmModal/ConfirmModal";
 import { CustomQuote } from "React/Components/App/hooks/background/types";
 
 class CustomQuotesModel extends Modal {
@@ -33,69 +32,44 @@ class CustomQuotesModel extends Modal {
 		contentEl.empty();
 
 		contentEl.createEl("h2", { text: "Custom quotes" });
-
-		const table = contentEl.createEl("table", { cls: "customQuotesTable" });
-		const thead = table.createEl("thead");
-		const headerRow = thead.createEl("tr");
-		headerRow.createEl("th");
-		headerRow.createEl("th", { text: "Text" });
-		headerRow.createEl("th", { text: "Author" });
-		const tbody = table.createEl("tbody");
-
-		this._customQuotes.forEach((customQuote, index) => {
-			const tableRow = tbody.createEl("tr");
-
-			const actionCell = tableRow.createEl("td");
-			const removeButton = actionCell.createEl("button", {
-				text: "Remove",
-				cls: "mod-warning",
-			});
-			removeButton.addEventListener("click", () => {
-				new ConfirmModal(
-					this.app,
-					() => {
-						this._customQuotes.splice(index, 1);
-						this.display();
-					},
-					"Remove quote",
-					`Are you sure?`,
-					"Remove"
-				).open();
-			});
-
-			const textCell = tableRow.createEl("td");
-			const quoteTextInput = textCell.createEl("textarea", {
-				text: customQuote.text,
-			});
-			quoteTextInput.addEventListener("change", (e: any) => {
-				this._customQuotes[index].text = e.target?.value;
-			});
-
-			const authorCell = tableRow.createEl("td");
-			const quoteAuthorInput = authorCell.createEl("input", {
-				type: "text",
-				value: customQuote.author,
-			});
-			quoteAuthorInput.addEventListener("change", (e: any) => {
-				this._customQuotes[index].author = e.target?.value;
-			});
+		contentEl.createEl("p", {
+			text: "Enter your custom quotes in CSV format (text, author). One quote per line.",
 		});
 
-		new Setting(contentEl).addButton((component) => {
-			component.setButtonText("Add new quote").onClick(() => {
-				this._customQuotes.push({
-					text: "",
-					author: "",
-				});
-				this.display();
-			});
+		const csvContent = this._customQuotes
+			.map((q) => `${q.text}, ${q.author}`)
+			.join("\n");
+
+		let currentCSV = csvContent;
+
+		const textArea = contentEl.createEl("textarea", {
+			cls: "beautitab-custom-quotes-textarea",
+		});
+		textArea.value = csvContent;
+		textArea.style.width = "100%";
+		textArea.style.height = "300px";
+		textArea.addEventListener("input", (e: any) => {
+			currentCSV = e.target.value;
 		});
 
 		new Setting(contentEl).addButton((component) => {
 			component.setButtonText("Save");
 
 			component.setCta().onClick(() => {
-				this._onSave(this._customQuotes);
+				const lines = currentCSV.split("\n");
+				const newQuotes: CustomQuote[] = lines
+					.map((line) => {
+						const lastCommaIndex = line.lastIndexOf(",");
+						if (lastCommaIndex === -1) {
+							return { text: line.trim(), author: "" };
+						}
+						const text = line.substring(0, lastCommaIndex).trim();
+						const author = line.substring(lastCommaIndex + 1).trim();
+						return { text, author };
+					})
+					.filter((q) => q.text !== "");
+
+				this._onSave(newQuotes);
 				this.close();
 			});
 		});
